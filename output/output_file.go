@@ -2,11 +2,15 @@ package output
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"perfma-replay/listener"
@@ -241,34 +245,48 @@ func (o *FileOutput) Write(data []byte) (n int, err error) {
 		o.payloadType = meta[0]
 		o.currentID = meta[1]
 	}
-
+	fmt.Println(string(data))
 	o.updateName()
-
 	if o.file == nil || o.currentName != o.file.Name() {
 		o.mu.Lock()
 		o.Close()
 
 		o.file, err = os.OpenFile(o.currentName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 		o.file.Sync()
-
 		if strings.HasSuffix(o.currentName, ".gz") {
 			o.writer = gzip.NewWriter(o.file)
 		} else {
 			o.writer = bufio.NewWriter(o.file)
 		}
-
+		w := csv.NewWriter(o.file)
+		// 写入数据
+		err := w.Write([]string{"url", "method", "host","cookie","body"})
+		if err != nil {
+			return 0, err
+		}
+		w.Flush()
 		if err != nil {
 			log.Fatal(o, "Cannot open file %q. Error: %s", o.currentName, err)
 		}
-
 		o.queueLength = 0
 		o.mu.Unlock()
+	}else{
+		w := csv.NewWriter(o.file)
+		content := Assemble(data)
+		b := bufio.NewReader(bytes.NewReader(content));
+		req, _ := http.ReadRequest(b)
+		// 采集数据写入文件
+		cookie,_ := req.Cookie("perfma-token")
+		body, _ := ioutil.ReadAll(req.Body)
+		collectData := []string{req.URL.String(), req.Method, req.Host, cookie.String(), fmt.Sprintf("%s",body)}
+		err := w.Write(collectData)
+		if err != nil {
+			return 0, err
+		}
+		w.Flush()
 	}
-	content := Assemble(data)
-	o.writer.Write(content)
-	o.writer.Write([]byte("\r\n"))
-	o.queueLength++
 
+	o.queueLength++
 	return len(data), nil
 }
 

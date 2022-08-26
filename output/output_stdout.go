@@ -1,9 +1,5 @@
 package output
 
-import (
-	"fmt"
-)
-
 // StdOutput used for debugging, prints all incoming requests
 type StdOutput struct {
 }
@@ -15,8 +11,14 @@ func NewStdOutput() (i *StdOutput) {
 }
 
 func (i *StdOutput) Write(data []byte) (int, error) {
-	fmt.Println(string(data))
-	// fmt.Println(len(proto.PayloadBody(data)))
+	//b := bufio.NewReader(bytes.NewReader(data));
+	//req, err := http.ReadRequest(b)
+	//if(err != nil){
+	//
+	//}
+	//fmt.Println(req)
+	//fmt.Println(req.Method)
+	//fmt.Println(req.URL)
 	return len(data), nil
 }
 

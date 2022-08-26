@@ -16,17 +16,17 @@ import (
 var closeCh chan int
 
 func main() {
-	//err := Settings.inputDubbo.Set(":20880")
-	//Settings.outputKafkaConfig.Topic = "xsea_test_goreplay"
-	//Settings.outputKafkaConfig.Host = "172.16.1.140:9092"
-	//Settings.outputKafkaConfig.UseJSON = true;
+	//err := Settings.inputHttp.Set(":17922")
+	////Settings.outputKafkaConfig.Topic = "xsea_test_goreplay"
+	////Settings.outputKafkaConfig.Host = "172.16.1.140:9092"
+	////Settings.outputKafkaConfig.UseJSON = true;
 	//nowTime := 1 * time.Second
-	//Settings.outputFile = []string{"/Users/liusu/Downloads/request.json"}
-	//Settings.outputFileConfig.QueueLimit = 60000
+	//Settings.outputFile = []string{"/Users/liusu/Downloads/request.csv"}
+	//Settings.outputFileConfig.QueueLimit = 5
 	//Settings.outputFileConfig.FlushInterval = nowTime
 	//Settings.outputFileConfig.SizeLimit.Set("32mb")
 	//Settings.outputFileConfig.Append = false;
-	//Settings.bizProtocol = [] string {"dubbo"}
+	//Settings.bizProtocol = [] string {"http"}
 	//if err != nil {
 	//	return
 	//}
