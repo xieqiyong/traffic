@@ -2,15 +2,11 @@ package output
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"perfma-replay/listener"
@@ -223,34 +219,46 @@ func (o *FileOutput) updateName() {
 }
 
 // 解析数据
-func Assemble(data []byte)  []byte{
-	if(listener.Dubbo == listener.BizProtocolType){
-		rpcData := message.DubboOutPutFile{}
-		rpcData.AssembleDubboData(data);
-		_content, err := json.Marshal(rpcData)
+func Assemble(msg *message.OutPutMessage) ([]byte, bool) {
+	if listener.Dubbo == listener.BizProtocolType {
+		handlerMessage := message.DubboOutPutFile{}
+		noData := handlerMessage.AssembleDubboData(msg)
+		content, err := json.Marshal(handlerMessage)
 		if err != nil {
-			return  nil
+			return nil, false
 		}
-		return _content
+		return content, noData
 	}
-	if(listener.Http == listener.BizProtocolType){
-		return data
+	if listener.Http == listener.BizProtocolType {
+		meta := strings.Split(string(msg.Meta), ":")
+		payloadType, _ := strconv.Atoi(meta[0])
+		ack := meta[1]
+		seq := meta[2]
+		if payloadType == 1 {
+			handlerMessage := message.FileHttpRequestMessage{}
+			noData := handlerMessage.AssembleHttpRequestData(msg, ack, seq)
+			content, _ := json.Marshal(handlerMessage)
+			return content, noData
+		} else {
+			handlerMessage := message.FileHttpResponseMessage{}
+			noData := handlerMessage.AssembleHttpResponseData(msg, ack, seq)
+			content, _ := json.Marshal(handlerMessage)
+			return content, noData
+		}
 	}
-	return nil
+	return nil, false
 }
 
-func (o *FileOutput) Write(data []byte) (n int, err error) {
+func (o *FileOutput) PluginWriter(msg *message.OutPutMessage) (n int, err error) {
 	if o.requestPerFile {
-		meta := proto.PayloadMeta(data)
+		meta := proto.PayloadMeta(msg.Data)
 		o.payloadType = meta[0]
 		o.currentID = meta[1]
 	}
-	fmt.Println(string(data))
 	o.updateName()
 	if o.file == nil || o.currentName != o.file.Name() {
 		o.mu.Lock()
 		o.Close()
-
 		o.file, err = os.OpenFile(o.currentName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 		o.file.Sync()
 		if strings.HasSuffix(o.currentName, ".gz") {
@@ -258,36 +266,22 @@ func (o *FileOutput) Write(data []byte) (n int, err error) {
 		} else {
 			o.writer = bufio.NewWriter(o.file)
 		}
-		w := csv.NewWriter(o.file)
-		// 写入数据
-		err := w.Write([]string{"url", "method", "host","cookie","body"})
-		if err != nil {
-			return 0, err
-		}
-		w.Flush()
 		if err != nil {
 			log.Fatal(o, "Cannot open file %q. Error: %s", o.currentName, err)
 		}
 		o.queueLength = 0
 		o.mu.Unlock()
-	}else{
-		w := csv.NewWriter(o.file)
-		content := Assemble(data)
-		b := bufio.NewReader(bytes.NewReader(content));
-		req, _ := http.ReadRequest(b)
-		// 采集数据写入文件
-		cookie,_ := req.Cookie("perfma-token")
-		body, _ := ioutil.ReadAll(req.Body)
-		collectData := []string{req.URL.String(), req.Method, req.Host, cookie.String(), fmt.Sprintf("%s",body)}
-		err := w.Write(collectData)
-		if err != nil {
-			return 0, err
-		}
-		w.Flush()
 	}
+	// 组装数据
+	content, flag := Assemble(msg)
+	if flag == false {
+		return 0, nil
+	}
+	o.writer.Write(content)
+	o.writer.Write([]byte("\r\n"))
 
 	o.queueLength++
-	return len(data), nil
+	return len(content), nil
 }
 
 func checkFileIsExist(filename string) bool {
@@ -296,40 +290,6 @@ func checkFileIsExist(filename string) bool {
 	}
 	return true
 }
-
-//func (o *FileOutput) Write1(data []byte) (n int, err error) {
-//	var filename = o.pathTemplate
-//	var f *os.File
-//	var err1 error
-//	// 打开文件
-//	if checkFileIsExist(filename) {
-//		f, err1 = os.OpenFile(filename, os.O_APPEND|os.O_RDWR, 0666)
-//		stat, err := f.Stat()
-//		if(stat.Size() >= 104857600){
-//			f, err1 = os.Create(filename)
-//		}
-//	} else {
-//		f, err1 = os.Create(filename)
-//	}
-//	if err != nil {
-//		return 0, err
-//	}
-//	rpcData := message.DubboOutPutFile{}
-//	rpcData.AssembleDubboData(data);
-//	_content, err := json.Marshal(rpcData)
-//	if err != nil {
-//		return 0, err
-//	}
-//	content := byteutils.SliceToString(_content)
-//
-//	defer f.Close()
-//	n, err1 = io.WriteString(f, content+"\r\n")
-//	if(err1 != nil){
-//		log.Println("写入文件失败")
-//	}
-//	return len(data), nil
-//}
-
 
 func (o *FileOutput) flush() {
 	// Don't exit on panic

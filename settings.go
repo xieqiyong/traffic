@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"perfma-replay/output"
+	"perfma-replay/size"
 	"sync"
 	"time"
 )
@@ -50,6 +51,10 @@ type AppSettings struct {
 	inputDubbo       MultiOption
 
 	inputHttp        MultiOption
+
+	trackResponse    bool
+
+	CopyBufferSize 	size.Size
 }
 
 // Settings holds Goreplay configuration
@@ -93,6 +98,13 @@ func init() {
 	flag.StringVar(&Settings.outputKafkaConfig.Host, "output-kafka-host", "", "Read request and response stats from Kafka:\n\tgor --input-raw :8080 --output-kafka-host '192.168.0.1:9092,192.168.0.2:9092'")
 	flag.StringVar(&Settings.outputKafkaConfig.Topic, "output-kafka-topic", "", "Read request and response stats from Kafka:\n\tgor --input-raw :8080 --output-kafka-topic 'kafka-log'")
 	flag.BoolVar(&Settings.outputKafkaConfig.UseJSON, "output-kafka-json-format", false, "If turned on, it will serialize messages from GoReplay text format to JSON.")
+
+	// 是否录制响应
+	flag.BoolVar(&Settings.trackResponse, "input-raw-track-response", true,"track response")
+
+	flag.Var(&Settings.CopyBufferSize, "copy-buffer-size", "Set the buffer size for an individual request (default 5MB)")
+
+	Settings.CopyBufferSize = 5242880
 }
 var previousDebugTime = time.Now()
 var debugMutex sync.Mutex

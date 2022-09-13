@@ -25,11 +25,10 @@ func NewDubboMessage(address string, trackResponse bool) (i *DubboInput) {
 	return
 }
 
-func (i *DubboInput) Read(data []byte) (int, error) {
-	msg := <-i.data
-	buf := msg.Data()
-
-	var header []byte
+func (i *DubboInput) PluginReader() (*message.OutPutMessage, error) {
+	//msg := <-i.data
+	//buf := msg.Data()
+	var outMessage message.OutPutMessage
 
 	//if msg.IsIncoming {
 	//	header = proto.PayloadHeader(proto.RequestPayload, msg.UUID(), msg.Start.UnixNano())
@@ -37,13 +36,11 @@ func (i *DubboInput) Read(data []byte) (int, error) {
 	//	header = proto.PayloadHeader(proto.ResponsePayload, msg.UUID(), msg.Start.UnixNano())
 	//}
 
-	copy(data[0:len(header)], header)
 
-	copy(data[len(header):], buf)
 
 	// copy(data, buf)
 
-	return len(buf) + len(header), nil
+	return &outMessage, nil
 }
 
 

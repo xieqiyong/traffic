@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"perfma-replay/message"
 	"perfma-replay/proto"
 	"strconv"
 	"strings"
@@ -156,11 +157,11 @@ func (i *FileInput) init() (err error) {
 	return nil
 }
 
-func (i *FileInput) Read(data []byte) (int, error) {
-	buf := <-i.data
-	copy(data, buf)
+func (i *FileInput) PluginReader() (*message.OutPutMessage, error) {
+	//buf := <-i.data
+	var outMessage message.OutPutMessage
 
-	return len(buf), nil
+	return &outMessage, nil
 }
 
 func (i *FileInput) String() string {

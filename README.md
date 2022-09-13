@@ -24,5 +24,6 @@ All credit goes to Leonid Bugaev, [@buger](https://twitter.com/buger), https://l
 ./perfma-replay --input-dubbo :20880  --biz-protocol "dubbo" --output-file "/Users/liusu/Downloads/request.json" --output-file-flush-interval "10s" --output-file-queue-limit "60000" --output-file-size-limit "32mb" --output-file-append "false"
 ```
 
-
+#Compile
+    CGO_ENABLED=1 GOOS=linux  GOARCH=amd64  CC=x86_64-linux-musl-gcc  CXX=x86_64-linux-musl-g++ go build -o BIN_NAME
 

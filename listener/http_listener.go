@@ -38,9 +38,12 @@ func NewHttpListener(addr string, port string, trackResponse bool) (l *HttpListe
 	return
 }
 
-func (l *HttpListener) parseDubboPacket(packet *ipPacket) (messages *message.HttpMessage) {
-	data  := packet.payload
-	messages = message.NewHttpMessage(data, false)
+func (l *HttpListener) parseHttpPacket(packet *ipPacket) (messages *message.HttpMessage) {
+	flag := false
+	if packet.newPacket.DstPort == l.port {
+		flag = true;
+	}
+	messages = message.NewHttpMessage(packet.payload, flag, packet.newPacket)
 	return
 }
 
@@ -49,7 +52,7 @@ func (l *HttpListener) recv() {
 		ipPacketsChan := l.underlying.Receiver()
 		select {
 		case packet := <-ipPacketsChan:
-			message := l.parseDubboPacket(packet)
+			message := l.parseHttpPacket(packet)
 			l.messagesChan <- message
 		}
 	}

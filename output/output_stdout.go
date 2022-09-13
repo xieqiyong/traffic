@@ -1,5 +1,9 @@
 package output
 
+import (
+	"perfma-replay/message"
+)
+
 // StdOutput used for debugging, prints all incoming requests
 type StdOutput struct {
 }
@@ -10,16 +14,8 @@ func NewStdOutput() (i *StdOutput) {
 	return
 }
 
-func (i *StdOutput) Write(data []byte) (int, error) {
-	//b := bufio.NewReader(bytes.NewReader(data));
-	//req, err := http.ReadRequest(b)
-	//if(err != nil){
-	//
-	//}
-	//fmt.Println(req)
-	//fmt.Println(req.Method)
-	//fmt.Println(req.URL)
-	return len(data), nil
+func (i *StdOutput) PluginWriter(msg *message.OutPutMessage) (int, error) {
+	return len(msg.Data), nil
 }
 
 func (i *StdOutput) String() string {

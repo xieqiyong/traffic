@@ -65,14 +65,14 @@ func (o *KafkaOutput) ErrorHandler() {
 }
 
 // PluginWrite writes a message to this plugin
-func (o *KafkaOutput) Write(data []byte) (n int, err error) {
+func (o *KafkaOutput) PluginWriter(msg *message.OutPutMessage) (n int, err error) {
 	var assembleData = message.DubboOutPutFile{};
 	jsonMessage, _ := json.Marshal(&assembleData)
-	var message sarama.StringEncoder
-	message = sarama.StringEncoder(byteutils.SliceToString(jsonMessage))
+	var encoder sarama.StringEncoder
+	encoder = sarama.StringEncoder(byteutils.SliceToString(jsonMessage))
 	o.producer.Input() <- &sarama.ProducerMessage{
 		Topic: o.config.Topic,
-		Value: message,
+		Value: encoder,
 	}
-	return len(message), nil
+	return len(encoder), nil
 }

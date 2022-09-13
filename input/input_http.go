@@ -5,6 +5,7 @@ import (
 	"net"
 	"perfma-replay/listener"
 	"perfma-replay/message"
+	"perfma-replay/proto"
 )
 
 type HttpInput struct {
@@ -25,25 +26,21 @@ func NewHttpMessage(address string, trackResponse bool) (i *HttpInput) {
 	return
 }
 
-func (i *HttpInput) Read(data []byte) (int, error) {
+// 最后组装，下一步写入
+func (i *HttpInput) PluginReader() (*message.OutPutMessage, error) {
+	var outMessage message.OutPutMessage
 	msg := <-i.data
 	buf := msg.Data()
-
+	newPacket := msg.NewPacket
 	var header []byte
-
-	//if msg.IsIncoming {
-	//	header = proto.PayloadHeader(proto.RequestPayload, msg.UUID(), msg.Start.UnixNano())
-	//} else {
-	//	header = proto.PayloadHeader(proto.ResponsePayload, msg.UUID(), msg.Start.UnixNano())
-	//}
-
-	copy(data[0:len(header)], header)
-
-	copy(data[len(header):], buf)
-
-	// copy(data, buf)
-
-	return len(buf) + len(header), nil
+	if msg.IsIncoming {
+		header = proto.PayloadHeader(proto.RequestPayload, newPacket.Ack, newPacket.Seq)
+	} else {
+		header = proto.PayloadHeader(proto.ResponsePayload, newPacket.Ack, newPacket.Seq)
+	}
+	outMessage.Meta = header
+	outMessage.Data = buf
+	return &outMessage, nil
 }
 
 

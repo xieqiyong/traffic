@@ -57,11 +57,12 @@ type DubboOutPutFile struct {
 	IsRequest					bool					`json:"isRequest,false"`
 }
 
-func (d *DubboOutPutFile)AssembleDubboData(content []byte) {
+func (d *DubboOutPutFile)AssembleDubboData(message *OutPutMessage) bool{
 	codec := proto.DubboCodec{}
-	decode, _, err := codec.Decode(content)
+	decode, _, err := codec.Decode(message.Data)
 	if err != nil {
 		log.Printf("解析dubbo请求数据错误:%s",err)
+		return false
 	}
 	request := decode.Result.(*remoting.Request)
 	data    := request.Data.(*invocation.RPCInvocation)
@@ -82,7 +83,7 @@ func (d *DubboOutPutFile)AssembleDubboData(content []byte) {
 	if(decode.IsRequest){
 		d.IsRequest = true;
 	}
-
+	return true
 }
 
 func NewDubboMessage(data []byte, isIncoming bool) (m *DubboMessage) {

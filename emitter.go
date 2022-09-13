@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"perfma-replay/message"
 	"time"
 )
 
@@ -23,24 +24,25 @@ func Start(stop chan int) {
 }
 
 // CopyMulty copies from 1 reader to multiple writers
-func CopyMulty(src io.Reader, writers ...io.Writer) (err error) {
-	buf := make([]byte, 5*1024*1024)
+func CopyMulty(src message.PluginReader, writers ...message.PluginWriter) (err error) {
+	if Settings.CopyBufferSize < 1 {
+		Settings.CopyBufferSize = 5 << 20
+	}
 	for {
-		nr, er := src.Read(buf)
-
-		if nr > 0 && len(buf) > nr {
-			payload := buf[:nr]
-			for _, dst := range writers {
-				dst.Write(payload)
-			}
-		}
-
-		if er == io.EOF {
-			break
-		}
+		msg, er := src.PluginReader()
 		if er != nil {
 			err = er
 			break
+		}
+		if msg != nil && len(msg.Data) > 0 {
+			if len(msg.Data) > int(Settings.CopyBufferSize) {
+				msg.Data = msg.Data[:Settings.CopyBufferSize]
+			}
+			for _, dst := range writers {
+				if _, err := dst.PluginWriter(msg); err != nil && err != io.ErrClosedPipe {
+					return err
+				}
+			}
 		}
 	}
 

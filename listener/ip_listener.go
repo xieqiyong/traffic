@@ -5,9 +5,9 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"io"
 	"log"
 	"net"
+	"perfma-replay/core"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +19,7 @@ type ipPacket struct {
 	dstIP     []byte
 	payload   []byte
 	timestamp time.Time
+	newPacket core.NewPacket
 }
 
 const (
@@ -143,12 +144,14 @@ func findPcapDevices(addr string) (interfaces []pcap.Interface, err error) {
 	return interfaces, nil
 }
 
-func (l *IPListener) buildPacket(srcIP []byte, dstIP []byte, payload []byte, timestamp time.Time) *ipPacket {
+func (l *IPListener) buildPacket(srcIP []byte, dstIP []byte, payload []byte,
+	timestamp time.Time, newPacket core.NewPacket) *ipPacket {
 	return &ipPacket{
 		srcIP:     srcIP,
 		dstIP:     dstIP,
 		payload:   payload,
 		timestamp: timestamp,
+		newPacket: newPacket,
 	}
 }
 
@@ -239,30 +242,29 @@ func (l *IPListener) readPcap() {
 			// TODO: !bpfSupported
 
 			l.mu.Unlock()
-
 			source := gopacket.NewPacketSource(handle, handle.LinkType())
 			source.Lazy = true
 			source.NoCopy = true
 			wg.Done()
 			for {
-				packet, err := source.NextPacket()
-				if err == io.EOF {
-					break
-				} else if err != nil {
-					log.Println("NextPacket error:", err)
+				packetData, ci, _ := handle.ReadPacketData()
+				newPacket := new(core.NewPacket)
+				linkSize := 14
+				linkType := int(layers.LinkTypeEthernet)
+				linkType = int(handle.LinkType())
+				linkSize, _ = pcapLinkTypeLength(linkType, false)
+				// ipv6 || ipv4 校验
+				flag := newPacket.Parse(packetData, linkType, linkSize, &ci, false)
+				if flag == false {
 					continue
 				}
-				networkLayer := packet.NetworkLayer()
-				srcIP := networkLayer.NetworkFlow().Src().Raw()
-				dstIP := networkLayer.NetworkFlow().Dst().Raw()
-				content := networkLayer.LayerPayload();
-				// 协议过滤
-				isSuccess := filterPackage(packet)
-				if(isSuccess == false){
-					continue
-				}
+				// 数据过滤
+				//isSuccess := filterPackage(packet, content)
+				//if isSuccess == false {
+				//	continue
+				//}
 				// 发送数据
-				l.ipPacketsChan <- l.buildPacket(srcIP, dstIP, content, packet.Metadata().Timestamp)
+				l.ipPacketsChan <- l.buildPacket(newPacket.SrcIP, newPacket.DstIP, newPacket.Payload, time.Now(), *newPacket)
 			}
 
 		}(d)
@@ -271,25 +273,26 @@ func (l *IPListener) readPcap() {
 	l.readyChan <- true
 }
 
-// 协议过滤
-func filterPackage(packet gopacket.Packet) (bool){
+// 录制类型、录制数据包过滤
+func filterPackage(packet gopacket.Packet, data []byte) bool {
 	// 是否为dubbo协议
-	if(Dubbo == BizProtocolType){
+	if Dubbo == BizProtocolType {
 		icmpLayer := packet.Layer(layers.LayerTypeTCP)
 		var content = icmpLayer.LayerPayload()
+		// 判断字符长度
 		if len(content) <= 17 {
-			return false;
+			return false
 		}
-		var	payload16 = fmt.Sprintf("%x", content)
+		// 转换位数
+		var payload16 = fmt.Sprintf("%x", content)
 		payload16 = payload16[0:4]
-		if(strings.Compare(payload16, "dabb") != 0){
-			return false;
+		// 两个字节是否为魔数 0xdabb
+		if strings.Compare(payload16, "dabb") != 0 {
+			return false
 		}
 	}
-	return true;
+	return true
 }
-
-
 
 func (l *IPListener) IsReady() bool {
 	select {
@@ -302,4 +305,31 @@ func (l *IPListener) IsReady() bool {
 
 func (l *IPListener) Receiver() chan *ipPacket {
 	return l.ipPacketsChan
+}
+
+func pcapLinkTypeLength(lType int, vlan bool) (int, bool) {
+	switch layers.LinkType(lType) {
+	case layers.LinkTypeEthernet:
+		if vlan {
+			return 18, true
+		} else {
+			return 14, true
+		}
+	case layers.LinkTypeNull, layers.LinkTypeLoop:
+		return 4, true
+	case layers.LinkTypeRaw, 12, 14:
+		return 0, true
+	case layers.LinkTypeIPv4, layers.LinkTypeIPv6:
+		// (TODO:) look out for IP encapsulation?
+		return 0, true
+	case layers.LinkTypeLinuxSLL:
+		return 16, true
+	case layers.LinkTypeFDDI:
+		return 13, true
+	case 226 /*DLT_IPNET*/ :
+		// https://www.tcpdump.org/linktypes/LINKTYPE_IPNET.html
+		return 24, true
+	default:
+		return 0, false
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"perfma-replay/listener"
+	"perfma-replay/message"
 	"perfma-replay/proto"
 )
 
@@ -25,9 +26,9 @@ func NewTCPInput(address string, trackResponse bool) (i *TCPInput) {
 	return
 }
 
-func (i *TCPInput) Read(data []byte) (int, error) {
-	msg := <-i.data
-	buf := msg.Data()
+func (i *TCPInput) PluginReader() (*message.OutPutMessage, error) {
+	//msg := <-i.data
+	//buf := msg.Data()
 
 	//var header []byte
 
@@ -42,8 +43,8 @@ func (i *TCPInput) Read(data []byte) (int, error) {
 	//copy(data[len(header):], buf)
 
 	// copy(data, buf)
-
-	return len(buf), nil
+	var outMessage message.OutPutMessage
+	return &outMessage, nil
 }
 
 func (i *TCPInput) listen(address string) {

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"io"
 	"perfma-replay/input"
+	"perfma-replay/message"
 	"perfma-replay/output"
 	"reflect"
 	"strings"
@@ -11,8 +11,8 @@ import (
 
 // InOutPlugins struct for holding references to plugins
 type InOutPlugins struct {
-	Inputs  []io.Reader
-	Outputs []io.Writer
+	Inputs  []message.PluginReader
+	Outputs []message.PluginWriter
 	All     []interface{}
 }
 
@@ -61,16 +61,16 @@ func registerPlugin(constructor interface{}, options ...interface{}) {
 		plugin = NewLimiter(plugin, limit)
 	}
 
-	_, isR := plugin.(io.Reader)
-	_, isW := plugin.(io.Writer)
+	_, isR := plugin.(message.PluginReader)
+	_, isW := plugin.(message.PluginWriter)
 
 	// Some of the output can be Readers as well because return responses
 	if isR && !isW {
-		Plugins.Inputs = append(Plugins.Inputs, plugin.(io.Reader))
+		Plugins.Inputs = append(Plugins.Inputs, plugin.(message.PluginReader))
 	}
 
 	if isW {
-		Plugins.Outputs = append(Plugins.Outputs, plugin.(io.Writer))
+		Plugins.Outputs = append(Plugins.Outputs, plugin.(message.PluginWriter))
 	}
 
 	Plugins.All = append(Plugins.All, plugin)
@@ -90,7 +90,7 @@ func InitPlugins() {
 	}
 
 	for _, options := range Settings.inputHttp {
-		registerPlugin(input.NewHttpMessage, options, false)
+		registerPlugin(input.NewHttpMessage, options, Settings.trackResponse)
 	}
 
 	for _, options := range Settings.inputFile {

@@ -77,7 +77,7 @@ func header(payload []byte, name []byte) (value []byte, headerStart, headerEnd, 
 		headerEnd += headerStart
 		colonIndex = bytes.IndexByte(payload[headerStart:headerEnd], ':')
 		if colonIndex == -1 {
-			// Malformed header, skip, most likely packet with partial headers
+			// Malformed header, skip, most likely core with partial headers
 			headerStart = headerEnd + 1
 			continue
 		}

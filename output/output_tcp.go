@@ -3,9 +3,9 @@ package output
 import (
 	"crypto/tls"
 	"fmt"
-	"io"
 	"log"
 	"net"
+	"perfma-replay/message"
 	"perfma-replay/proto"
 	"perfma-replay/stats"
 	"time"
@@ -30,7 +30,7 @@ type TCPOutputConfig struct {
 
 // NewTCPOutput constructor for TCPOutput
 // Initialize 10 workers which hold keep-alive connection
-func NewTCPOutput(address string, config *TCPOutputConfig) io.Writer {
+func NewTCPOutput(address string, config *TCPOutputConfig) message.PluginWriter {
 	o := new(TCPOutput)
 
 	o.address = address
@@ -94,22 +94,22 @@ func (o *TCPOutput) worker() {
 	}
 }
 
-func (o *TCPOutput) Write(data []byte) (n int, err error) {
-	if !proto.IsRequestPayload(data) {
-		return len(data), nil
-	}
+func (o *TCPOutput) PluginWriter(msg *message.OutPutMessage) (n int, err error) {
+	//if !proto.IsRequestPayload(data) {
+	//	return len(data), nil
+	//}
+	//
+	//// We have to copy, because sending data in multiple threads
+	//newBuf := make([]byte, len(data))
+	//copy(newBuf, data)
+	//
+	//o.buf <- newBuf
+	//
+	//if o.config.Stats {
+	//	o.bufStats.Write(len(o.buf))
+	//}
 
-	// We have to copy, because sending data in multiple threads
-	newBuf := make([]byte, len(data))
-	copy(newBuf, data)
-
-	o.buf <- newBuf
-
-	if o.config.Stats {
-		o.bufStats.Write(len(o.buf))
-	}
-
-	return len(data), nil
+	return len(""), nil
 }
 
 func (o *TCPOutput) connect(address string) (conn net.Conn, err error) {
