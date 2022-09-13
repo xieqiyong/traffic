@@ -34,9 +34,11 @@ func (i *HttpInput) PluginReader() (*message.OutPutMessage, error) {
 	newPacket := msg.NewPacket
 	var header []byte
 	if msg.IsIncoming {
-		header = proto.PayloadHeader(proto.RequestPayload, newPacket.Ack, newPacket.Seq)
+		uuid := proto.UUID(&newPacket, true)
+		header = proto.PayloadHeader(proto.RequestPayload, uuid)
 	} else {
-		header = proto.PayloadHeader(proto.ResponsePayload, newPacket.Ack, newPacket.Seq)
+		uuid := proto.UUID(&newPacket, false)
+		header = proto.PayloadHeader(proto.ResponsePayload, uuid)
 	}
 	outMessage.Meta = header
 	outMessage.Data = buf

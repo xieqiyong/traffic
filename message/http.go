@@ -36,8 +36,7 @@ type FileHttpRequestMessage struct {
 	Url         string              `json:"url"`
 	CreateTime  string              `json:"createTime"`
 	PayloadType string              `json:"payloadType"`
-	AckNumber   string              `json:"ackNumber"`
-	SeqNumber   string              `json:"seqNumber"`
+	Token   	string              `json:"token"`
 }
 
 type Header map[string][]string
@@ -58,8 +57,7 @@ type FileHttpResponseMessage struct {
 	//TLS              *tls.ConnectionState `json:"tLS"`
 	PayloadType      string               `json:"payloadType"`
 	CreateTime       string               `json:"createTime"`
-	AckNumber        string               `json:"ackNumber"`
-	SeqNumber        string               `json:"seqNumber"`
+	Token   		 string              `json:"token"`
 }
 
 func NewHttpMessage(data []byte, isIncoming bool, newPacket core.NewPacket) (m *HttpMessage) {
@@ -82,7 +80,7 @@ func (m *HttpMessage) Data() []byte {
 	return m.data
 }
 
-func (f *FileHttpRequestMessage) AssembleHttpRequestData(message *OutPutMessage, ack string, seq string) bool {
+func (f *FileHttpRequestMessage) AssembleHttpRequestData(message *OutPutMessage, currentID []byte) bool {
 	newContent := bufio.NewReader(bytes.NewReader(message.Data))
 	req, _ := http.ReadRequest(newContent)
 	if req == nil {
@@ -103,12 +101,11 @@ func (f *FileHttpRequestMessage) AssembleHttpRequestData(message *OutPutMessage,
 	f.Host = req.Host
 	f.CreateTime = carbon.Now().ToDateTimeString()
 	f.PayloadType = string(proto.RequestPayload)
-	f.AckNumber = ack
-	f.SeqNumber = seq
+	f.Token = string(currentID)
 	return true
 }
 
-func (f *FileHttpResponseMessage) AssembleHttpResponseData(message *OutPutMessage, ack string, seq string) bool {
+func (f *FileHttpResponseMessage) AssembleHttpResponseData(message *OutPutMessage, currentID []byte) bool {
 	newContent := bufio.NewReader(bytes.NewReader(message.Data))
 	tp := textproto.NewReader(newContent)
 	line, err := tp.ReadLine()
@@ -162,8 +159,7 @@ func (f *FileHttpResponseMessage) AssembleHttpResponseData(message *OutPutMessag
 
 	f.PayloadType = string(proto.ResponsePayload)
 	f.CreateTime = carbon.Now().ToDateTimeString()
-	f.AckNumber = ack
-	f.SeqNumber = seq
+	f.Token = string(currentID)
 	f.Body = body
 	return true
 }

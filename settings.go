@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"perfma-replay/modifier"
 	"perfma-replay/output"
 	"perfma-replay/size"
 	"sync"
@@ -55,6 +56,8 @@ type AppSettings struct {
 	trackResponse    bool
 
 	CopyBufferSize 	size.Size
+
+	modifierConfig  modifier.HTTPModifierConfig
 }
 
 // Settings holds Goreplay configuration
@@ -104,7 +107,10 @@ func init() {
 
 	flag.Var(&Settings.CopyBufferSize, "copy-buffer-size", "Set the buffer size for an individual request (default 5MB)")
 
+	flag.Var(&Settings.modifierConfig.URLRegexp, "http-allow-url", "A regexp to match requests against. Filter get matched against full url with domain. Anything else will be dropped:\n\t gor --input-raw :8080 --output-http staging.com --http-allow-url ^www.")
+
 	Settings.CopyBufferSize = 5242880
+	Settings.outputFileConfig.SizeLimit = 33554432
 }
 var previousDebugTime = time.Now()
 var debugMutex sync.Mutex

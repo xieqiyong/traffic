@@ -230,18 +230,16 @@ func Assemble(msg *message.OutPutMessage) ([]byte, bool) {
 		return content, noData
 	}
 	if listener.Http == listener.BizProtocolType {
-		meta := strings.Split(string(msg.Meta), ":")
-		payloadType, _ := strconv.Atoi(meta[0])
-		ack := meta[1]
-		seq := meta[2]
-		if payloadType == 1 {
+		meta := proto.PayloadMeta(msg.Meta)
+		currentID := meta[1]
+		if string(meta[0]) == "1" {
 			handlerMessage := message.FileHttpRequestMessage{}
-			noData := handlerMessage.AssembleHttpRequestData(msg, ack, seq)
+			noData := handlerMessage.AssembleHttpRequestData(msg, currentID)
 			content, _ := json.Marshal(handlerMessage)
 			return content, noData
 		} else {
 			handlerMessage := message.FileHttpResponseMessage{}
-			noData := handlerMessage.AssembleHttpResponseData(msg, ack, seq)
+			noData := handlerMessage.AssembleHttpResponseData(msg, currentID)
 			content, _ := json.Marshal(handlerMessage)
 			return content, noData
 		}
@@ -251,7 +249,7 @@ func Assemble(msg *message.OutPutMessage) ([]byte, bool) {
 
 func (o *FileOutput) PluginWriter(msg *message.OutPutMessage) (n int, err error) {
 	if o.requestPerFile {
-		meta := proto.PayloadMeta(msg.Data)
+		meta := proto.PayloadMeta(msg.Meta)
 		o.payloadType = meta[0]
 		o.currentID = meta[1]
 	}

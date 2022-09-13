@@ -27,6 +27,7 @@ func main() {
 	//}
 	//Settings.outputStdout = true;
 	//Settings.trackResponse = true;
+	//Settings.modifierConfig.URLRegexp.Set("/api/*")
 	// add line number to log
 	if os.Getenv("GOMAXPROCS") == "" {
 		runtime.GOMAXPROCS(runtime.NumCPU() * 2)
