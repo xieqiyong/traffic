@@ -218,7 +218,7 @@ func (o *FileOutput) updateName() {
 	o.currentName = filepath.Clean(o.filename())
 }
 
-// 解析数据
+// 解析请求数据
 func Assemble(msg *message.OutPutMessage) ([]byte, bool) {
 	if listener.Dubbo == listener.BizProtocolType {
 		handlerMessage := message.DubboOutPutFile{}
@@ -235,11 +235,6 @@ func Assemble(msg *message.OutPutMessage) ([]byte, bool) {
 		if string(meta[0]) == "1" {
 			handlerMessage := message.FileHttpRequestMessage{}
 			noData := handlerMessage.AssembleHttpRequestData(msg, currentID)
-			content, _ := json.Marshal(handlerMessage)
-			return content, noData
-		} else {
-			handlerMessage := message.FileHttpResponseMessage{}
-			noData := handlerMessage.AssembleHttpResponseData(msg, currentID)
 			content, _ := json.Marshal(handlerMessage)
 			return content, noData
 		}
