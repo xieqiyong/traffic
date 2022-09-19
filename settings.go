@@ -80,7 +80,7 @@ func init() {
 	flag.BoolVar(&Settings.inputFileLoop, "input-file-loop", false, "Loop input files, useful for performance testing")
 
 	flag.Var(&Settings.outputFile, "output-file", "Write incoming requests to file: \n\ttcp_replay --input-tcp :80 --output-file ./requests.gor")
-	flag.Var(&Settings.outputResponseFile, "output-request-file", "Write incoming requests to file: \n\ttcp_replay --input-tcp :80 --output-file ./response.gor")
+	flag.Var(&Settings.outputResponseFile, "output-response-file", "Write incoming requests to file: \n\ttcp_replay --input-tcp :80 --output-file ./response.gor")
 	flag.DurationVar(&Settings.outputFileConfig.FlushInterval, "output-file-flush-interval", time.Second, "Interval for forcing buffer flush to the file, default: 1s")
 	flag.BoolVar(&Settings.outputFileConfig.Append, "output-file-append", false, "The flushed chunk is appended to existence file or not")
 
