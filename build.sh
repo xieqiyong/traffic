@@ -3,8 +3,7 @@ MAKE_NAME=${PWD}
 echo "开始构建：${MAKE_NAME}..."
 echo "编译动态库..."
 export PCAPV=1.9.1 &&
-wget http://www.tcpdump.org/release/libpcap-$PCAPV.tar.gz &&
-tar xvf libpcap-$PCAPV.tar.gz &&
+tar xvf ${MAKE_NAME}/deploy/libpcap-$PCAPV.tar.gz &&
 cd libpcap-$PCAPV &&
 ./configure --with-pcap=linux &&
 make &&
