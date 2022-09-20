@@ -90,7 +90,7 @@ func InitPlugins() {
 	}
 
 	for _, options := range Settings.inputHttp {
-		registerPlugin(input.NewHttpMessage, options, Settings.trackResponse)
+		registerPlugin(input.NewHttpMessage, options, Settings.trackResponse, Settings.CopyBufferSize)
 	}
 
 	for _, options := range Settings.inputFile {

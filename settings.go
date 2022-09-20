@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"perfma-replay/listener"
 	"perfma-replay/modifier"
 	"perfma-replay/output"
 	"perfma-replay/size"
@@ -59,6 +60,7 @@ type AppSettings struct {
 	CopyBufferSize 	size.Size
 
 	modifierConfig  modifier.HTTPModifierConfig
+	PcapOptions  listener.PcapOptions
 }
 
 // Settings holds Goreplay configuration
@@ -110,7 +112,9 @@ func init() {
 	flag.Var(&Settings.CopyBufferSize, "copy-buffer-size", "Set the buffer size for an individual request (default 5MB)")
 
 	flag.Var(&Settings.modifierConfig.URLRegexp, "http-allow-url", "A regexp to match requests against. Filter get matched against full url with domain. Anything else will be dropped:\n\t gor --input-raw :8080 --output-http staging.com --http-allow-url ^www.")
-
+	flag.Var(&Settings.PcapOptions.BufferSize, "input-raw-buffer-size", "Controls size of the OS buffer which holds packets until they dispatched. Default value depends by system: in Linux around 2MB. If you see big package drop, increase this value.")
+	flag.BoolVar(&Settings.PcapOptions.Promiscuous, "input-raw-promisc", false, "enable promiscuous mode")
+	flag.BoolVar(&Settings.PcapOptions.Monitor, "input-raw-monitor", false, "enable RF monitor mode")
 	Settings.CopyBufferSize = 5242880
 	Settings.outputFileConfig.SizeLimit = 33554432
 }

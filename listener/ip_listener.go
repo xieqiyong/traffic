@@ -1,16 +1,25 @@
 package listener
 
 import (
+	"context"
+	"errors"
+	"expvar"
 	"fmt"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"io"
 	"log"
 	"net"
+	"os"
 	"perfma-replay/core"
-	"strconv"
+	"perfma-replay/proto"
+	"perfma-replay/size"
+	"perfma-replay/tcp"
+	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -22,31 +31,54 @@ type ipPacket struct {
 	newPacket core.NewPacket
 }
 
+type PcapOptions struct {
+	BufferTimeout time.Duration `json:"input-raw-buffer-timeout"`
+	TimestampType string        `json:"input-raw-timestamp-type"`
+	BPFFilter     string        `json:"input-raw-bpf-filter"`
+	BufferSize    size.Size     `json:"input-raw-buffer-size"`
+	Promiscuous   bool          `json:"input-raw-promisc"`
+	Monitor       bool          `json:"input-raw-monitor"`
+	Snaplen       bool          `json:"input-raw-override-snaplen"`
+}
+
 const (
 	Dubbo = "dubbo"
 	Http  = "http"
 )
 
+var stats *expvar.Map
+func init() {
+	stats = expvar.NewMap("raw")
+	stats.Init()
+}
+
 // 协议类型
 var BizProtocolType string
 
 type IPListener struct {
-	mu sync.Mutex
-
+	sync.Mutex
 	// IP to listen
 	addr string
 	// Port to listen
-	port uint16
-
+	ports []uint16
 	trackResponse bool
-
-	pcapHandles []*pcap.Handle
-
+	Interfaces []pcap.Interface
 	ipPacketsChan chan *ipPacket
-
 	readyChan chan bool
-
 	transport string
+	protocol        tcp.TCPProtocol
+	messages        chan *tcp.Message
+	Transport     string
+	host string
+	Reading    chan bool
+	Handles    map[string]packetHandle
+	closeDone chan struct{}
+	quit      chan struct{}
+	expiry          time.Duration
+	allowIncomplete bool
+	loopIndex  int
+	Activate   func() error
+	PcapOptions
 }
 
 type packetHandle struct {
@@ -54,17 +86,31 @@ type packetHandle struct {
 	ips     []net.IP
 }
 
-func NewIPListener(addr string, port uint16, trackResponse bool) (l *IPListener) {
+type PcapStatProvider interface {
+	Stats() (*pcap.Stats, error)
+}
+
+func NewIPListener(host string, ports []uint16, trackResponse bool, expiry time.Duration, allowIncomplete bool) (l *IPListener, err error) {
 	l = &IPListener{}
-	l.ipPacketsChan = make(chan *ipPacket, 10000)
-
-	l.readyChan = make(chan bool, 1)
-	l.addr = addr
-	l.port = port
+	l.host = host
+	if l.host == "localhost" {
+		l.host = "127.0.0.1"
+	}
+	l.Handles = make(map[string]packetHandle)
+	l.closeDone = make(chan struct{})
+	l.quit = make(chan struct{})
+	l.Reading = make(chan bool)
+	l.ports = ports
 	l.trackResponse = trackResponse
-
-	go l.readPcap()
-
+	l.Transport = "tcp"
+	l.allowIncomplete = allowIncomplete
+	l.expiry = expiry
+	l.messages = make(chan *tcp.Message, 10000)
+	l.Activate = l.activatePcap
+	err = l.setInterfaces()
+	if err != nil {
+		return nil, err
+	}
 	return
 }
 
@@ -155,122 +201,96 @@ func (l *IPListener) buildPacket(srcIP []byte, dstIP []byte, payload []byte,
 	}
 }
 
-func (l *IPListener) readPcap() {
-	devices, err := findPcapDevices(l.addr)
-	if err != nil {
-		log.Fatal(err)
+func (l *IPListener) closeHandles(key string) {
+	l.Lock()
+	defer l.Unlock()
+	if handle, ok := l.Handles[key]; ok {
+		if c, ok := handle.handler.(io.Closer); ok {
+			c.Close()
+		}
+
+		delete(l.Handles, key)
+		if len(l.Handles) == 0 {
+			close(l.closeDone)
+		}
 	}
+}
 
-	bpfSupported := true
-	// 方便测试,线上打开
-	//if runtime.GOOS == "darwin" {
-	//	bpfSupported = false
-	//}
-	var wg sync.WaitGroup
-	wg.Add(len(devices))
-	for _, d := range devices {
-		go func(device pcap.Interface) {
-			inactive, err := pcap.NewInactiveHandle(device.Name)
-			if err != nil {
-				log.Println("Pcap Error while opening device", device.Name, err)
-				wg.Done()
-				return
-			}
+func (l *IPListener) readPcap() {
+	l.Lock()
+	defer l.Unlock()
+	for key, handle := range l.Handles {
+		go func(key string, hndl packetHandle) {
+			runtime.LockOSThread()
 
-			if it, err := net.InterfaceByName(device.Name); err == nil {
-				// Auto-guess max length of ipPacket to capture
-				inactive.SetSnapLen(it.MTU + 68*2)
-			} else {
-				inactive.SetSnapLen(65536)
-			}
-
-			inactive.SetTimeout(-1 * time.Second)
-			inactive.SetPromisc(true)
-
-			handle, herr := inactive.Activate()
-			if herr != nil {
-				log.Println("PCAP Activate error:", herr)
-				wg.Done()
-				return
-			}
-
-			defer handle.Close()
-			l.mu.Lock()
-			l.pcapHandles = append(l.pcapHandles, handle)
-
-			var bpfDstHost, bpfSrcHost string
-			var loopback = isLoopback(device)
-
-			if loopback {
-				var allAddr []string
-				for _, dc := range devices {
-					for _, addr := range dc.Addresses {
-						allAddr = append(allAddr, "(dst host "+addr.IP.String()+" and src host "+addr.IP.String()+")")
+			defer l.closeHandles(key)
+			linkSize := 14
+			linkType := int(layers.LinkTypeEthernet)
+			if _, ok := hndl.handler.(*pcap.Handle); ok {
+				linkType = int(hndl.handler.(*pcap.Handle).LinkType())
+				linkSize, ok = pcapLinkTypeLength(linkType)
+				if !ok {
+					if os.Getenv("GORDEBUG") != "0" {
+						log.Printf("can not identify link type of an interface '%s'\n", key)
 					}
-				}
-
-				bpfDstHost = strings.Join(allAddr, " or ")
-				bpfSrcHost = bpfDstHost
-			} else {
-				for i, addr := range device.Addresses {
-					bpfDstHost += "dst host " + addr.IP.String()
-					bpfSrcHost += "src host " + addr.IP.String()
-					if i != len(device.Addresses)-1 {
-						bpfDstHost += " or "
-						bpfSrcHost += " or "
-					}
+					return // can't find the linktype size
 				}
 			}
 
-			if bpfSupported {
+			messageParser := tcp.NewMessageParser(l.messages, l.ports, hndl.ips, l.expiry, l.allowIncomplete)
 
-				var bpf string
+			if l.protocol == tcp.ProtocolHTTP {
+				messageParser.Start = http1StartHint
+				messageParser.End = http1EndHint
+			}
 
-				if l.trackResponse {
-					bpf = "(tcp dst port " + strconv.Itoa(int(l.port)) + " and (" + bpfDstHost + ")) or (" + "tcp src port " + strconv.Itoa(int(l.port)) + " and (" + bpfSrcHost + "))"
-				} else {
-					bpf = "tcp dst port " + strconv.Itoa(int(l.port)) + " and (" + bpfDstHost + ")"
-				}
-				fmt.Println("Interface:", device.Name, ". BPF Filter:", bpf)
-				if err := handle.SetBPFFilter(bpf); err != nil {
-					log.Println("BPF filter error:", err, "Device:", device.Name, bpf)
-					wg.Done()
+			timer := time.NewTicker(1 * time.Second)
+
+			for {
+				select {
+				case <-l.quit:
+					return
+				case <-timer.C:
+					if h, ok := hndl.handler.(PcapStatProvider); ok {
+						s, err := h.Stats()
+						if err == nil {
+							stats.Add("packets_received", int64(s.PacketsReceived))
+							stats.Add("packets_dropped", int64(s.PacketsDropped))
+							stats.Add("packets_if_dropped", int64(s.PacketsIfDropped))
+						}
+					}
+				default:
+					data, ci, err := hndl.handler.ReadPacketData()
+					if err == nil {
+						messageParser.PacketHandler(&tcp.PcapPacket{
+							Data:     data,
+							LType:    linkType,
+							LTypeLen: linkSize,
+							Ci:       &ci,
+						})
+						continue
+					}
+					if enext, ok := err.(pcap.NextError); ok && enext == pcap.NextErrorTimeoutExpired {
+						continue
+					}
+					if eno, ok := err.(syscall.Errno); ok && eno.Temporary() {
+						continue
+					}
+					if enet, ok := err.(*net.OpError); ok && (enet.Temporary() || enet.Timeout()) {
+						continue
+					}
+					if err == io.EOF || err == io.ErrClosedPipe {
+						log.Printf("stopped reading from %s interface with error %s\n", key, err)
+						return
+					}
+
+					log.Printf("stopped reading from %s interface with error %s\n", key, err)
 					return
 				}
 			}
-
-			// TODO: !bpfSupported
-
-			l.mu.Unlock()
-			source := gopacket.NewPacketSource(handle, handle.LinkType())
-			source.Lazy = true
-			source.NoCopy = true
-			wg.Done()
-			for {
-				packetData, ci, _ := handle.ReadPacketData()
-				newPacket := new(core.NewPacket)
-				linkSize := 14
-				linkType := int(layers.LinkTypeEthernet)
-				linkType = int(handle.LinkType())
-				linkSize, _ = pcapLinkTypeLength(linkType, false)
-				// ipv6 || ipv4 校验
-				flag := newPacket.Parse(packetData, linkType, linkSize, &ci, false)
-				if flag == false {
-					continue
-				}
-				// 数据过滤
-				//isSuccess := filterPackage(packet, content)
-				//if isSuccess == false {
-				//	continue
-				//}
-				// 发送数据
-				l.ipPacketsChan <- l.buildPacket(newPacket.SrcIP, newPacket.DstIP, newPacket.Payload, time.Now(), *newPacket)
-			}
-
-		}(d)
+		}(key, handle)
 	}
-	wg.Wait()
-	l.readyChan <- true
+	close(l.Reading)
 }
 
 // 录制类型、录制数据包过滤
@@ -307,14 +327,10 @@ func (l *IPListener) Receiver() chan *ipPacket {
 	return l.ipPacketsChan
 }
 
-func pcapLinkTypeLength(lType int, vlan bool) (int, bool) {
+func pcapLinkTypeLength(lType int) (int, bool) {
 	switch layers.LinkType(lType) {
 	case layers.LinkTypeEthernet:
-		if vlan {
-			return 18, true
-		} else {
-			return 14, true
-		}
+		return 14, true
 	case layers.LinkTypeNull, layers.LinkTypeLoop:
 		return 4, true
 	case layers.LinkTypeRaw, 12, 14:
@@ -332,4 +348,306 @@ func pcapLinkTypeLength(lType int, vlan bool) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func http1StartHint(pckt *tcp.Packet) (isRequest, isResponse bool) {
+	if proto.HasRequestTitle(pckt.Payload) {
+		return true, false
+	}
+
+	if proto.HasResponseTitle(pckt.Payload) {
+		return false, true
+	}
+
+	// No request or response detected
+	return false, false
+}
+
+func http1EndHint(m *tcp.Message) bool {
+	if m.MissingChunk() {
+		return false
+	}
+
+	return proto.HasFullPayload(m, m.PacketData()...)
+}
+
+
+
+func portsFilter(transport string, direction string, ports []uint16) string {
+	if len(ports) == 0 || ports[0] == 0 {
+		return fmt.Sprintf("%s %s portrange 0-%d", transport, direction, 1<<16-1)
+	}
+
+	var filters []string
+	for _, port := range ports {
+		filters = append(filters, fmt.Sprintf("%s %s port %d", transport, direction, port))
+	}
+	return strings.Join(filters, " or ")
+}
+
+func hostsFilter(direction string, hosts []string) string {
+	var hostsFilters []string
+	for _, host := range hosts {
+		hostsFilters = append(hostsFilters, fmt.Sprintf("%s host %s", direction, host))
+	}
+
+	return strings.Join(hostsFilters, " or ")
+}
+
+func interfaceAddresses(ifi pcap.Interface) []string {
+	var hosts []string
+	for _, addr := range ifi.Addresses {
+		hosts = append(hosts, addr.IP.String())
+	}
+	return hosts
+}
+
+func listenAll(addr string) bool {
+	switch addr {
+	case "", "0.0.0.0", "[::]", "::":
+		return true
+	}
+	return false
+}
+
+func (l *IPListener) Filter(ifi pcap.Interface) (filter string) {
+	// https://www.tcpdump.org/manpages/pcap-filter.7.html
+
+	hosts := []string{l.host}
+	if listenAll(l.host) || isDevice(l.host, ifi) {
+		hosts = interfaceAddresses(ifi)
+	}
+
+	filter = portsFilter(l.Transport, "dst", l.ports)
+
+	if len(hosts) != 0 && !l.Promiscuous {
+		filter = fmt.Sprintf("((%s) and (%s))", filter, hostsFilter("dst", hosts))
+	} else {
+		filter = fmt.Sprintf("(%s)", filter)
+	}
+
+	if l.trackResponse {
+		responseFilter := portsFilter(l.Transport, "src", l.ports)
+
+		if len(hosts) != 0 && !l.Promiscuous {
+			responseFilter = fmt.Sprintf("((%s) and (%s))", responseFilter, hostsFilter("src", hosts))
+		} else {
+			responseFilter = fmt.Sprintf("(%s)", responseFilter)
+		}
+
+		filter = fmt.Sprintf("%s or %s", filter, responseFilter)
+	}
+
+	return
+}
+
+
+func (l *IPListener) Messages() chan *tcp.Message {
+	return l.messages
+}
+
+func (l *IPListener) ListenBackground(ctx context.Context) chan error {
+	err := make(chan error, 1)
+	go func() {
+		defer close(err)
+		if e := l.Listen(ctx); err != nil {
+			err <- e
+		}
+	}()
+	return err
+}
+
+func (l *IPListener) Listen(ctx context.Context) (err error) {
+	l.readPcap()
+	done := ctx.Done()
+	select {
+	case <-done:
+		close(l.quit) // signal close on all handles
+		<-l.closeDone // wait all handles to be closed
+		err = ctx.Err()
+	case <-l.closeDone: // all handles closed voluntarily
+	}
+	return
+}
+
+func (l *IPListener) setInterfaces() (err error) {
+	var pifis []pcap.Interface
+	pifis, err = pcap.FindAllDevs()
+	ifis, _ := net.Interfaces()
+	if err != nil {
+		return
+	}
+
+	for _, pi := range pifis {
+		if isDevice(l.host, pi) {
+			l.Interfaces = []pcap.Interface{pi}
+			return
+		}
+
+		var ni net.Interface
+		for _, i := range ifis {
+			if i.Name == pi.Name {
+				ni = i
+				break
+			}
+
+			addrs, _ := i.Addrs()
+			for _, a := range addrs {
+				for _, pa := range pi.Addresses {
+					if a.String() == pa.IP.String() {
+						ni = i
+						break
+					}
+				}
+			}
+		}
+
+		if ni.Flags&net.FlagLoopback != 0 {
+			l.loopIndex = ni.Index
+		}
+
+		if runtime.GOOS != "windows" {
+			if len(pi.Addresses) == 0 {
+				continue
+			}
+
+			if ni.Flags&net.FlagUp == 0 {
+				continue
+			}
+		}
+
+		l.Interfaces = append(l.Interfaces, pi)
+	}
+	return
+}
+
+func isDevice(addr string, ifi pcap.Interface) bool {
+	// Windows npcap loopback have no IPs
+	if addr == "127.0.0.1" && ifi.Name == `\Device\NPF_Loopback` {
+		return true
+	}
+
+	if addr == ifi.Name {
+		return true
+	}
+
+	for _, _addr := range ifi.Addresses {
+		if _addr.IP.String() == addr {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (l *IPListener) PcapHandle(ifi pcap.Interface) (handle *pcap.Handle, err error) {
+	var inactive *pcap.InactiveHandle
+	inactive, err = pcap.NewInactiveHandle(ifi.Name)
+	if err != nil {
+		return nil, fmt.Errorf("inactive handle error: %q, interface: %q", err, ifi.Name)
+	}
+	defer inactive.CleanUp()
+
+	if l.TimestampType != "" && l.TimestampType != "go" {
+		var ts pcap.TimestampSource
+		ts, err = pcap.TimestampSourceFromString(l.TimestampType)
+		fmt.Println("Setting custom Timestamp Source. Supported values: `go`, ", inactive.SupportedTimestamps())
+		err = inactive.SetTimestampSource(ts)
+		if err != nil {
+			return nil, fmt.Errorf("%q: supported timestamps: %q, interface: %q", err, inactive.SupportedTimestamps(), ifi.Name)
+		}
+	}
+	if l.Promiscuous {
+		if err = inactive.SetPromisc(l.Promiscuous); err != nil {
+			return nil, fmt.Errorf("promiscuous mode error: %q, interface: %q", err, ifi.Name)
+		}
+	}
+	if l.Monitor {
+		if err = inactive.SetRFMon(l.Monitor); err != nil && !errors.Is(err, pcap.CannotSetRFMon) {
+			return nil, fmt.Errorf("monitor mode error: %q, interface: %q", err, ifi.Name)
+		}
+	}
+
+	var snap int
+
+	if !l.Snaplen {
+		infs, _ := net.Interfaces()
+		for _, i := range infs {
+			if i.Name == ifi.Name {
+				snap = i.MTU + 200
+			}
+		}
+	}
+
+	if snap == 0 {
+		snap = 64<<10 + 200
+	}
+
+	err = inactive.SetSnapLen(snap)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot length error: %q, interface: %q", err, ifi.Name)
+	}
+	if l.BufferSize > 0 {
+		err = inactive.SetBufferSize(int(l.BufferSize))
+		if err != nil {
+			return nil, fmt.Errorf("handle buffer size error: %q, interface: %q", err, ifi.Name)
+		}
+	}
+	if l.BufferTimeout == 0 {
+		l.BufferTimeout = 2000 * time.Millisecond
+	}
+	err = inactive.SetTimeout(l.BufferTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("handle buffer timeout error: %q, interface: %q", err, ifi.Name)
+	}
+	handle, err = inactive.Activate()
+	if err != nil {
+		return nil, fmt.Errorf("PCAP Activate device error: %q, interface: %q", err, ifi.Name)
+	}
+
+	bpfFilter := l.BPFFilter
+	if bpfFilter == "" {
+		bpfFilter = l.Filter(ifi)
+	}
+	fmt.Println("Interface:", ifi.Name, ". BPF Filter:", bpfFilter)
+	err = handle.SetBPFFilter(bpfFilter)
+	if err != nil {
+		handle.Close()
+		return nil, fmt.Errorf("BPF filter error: %q%s, interface: %q", err, bpfFilter, ifi.Name)
+	}
+	return
+}
+
+
+func (l *IPListener) activatePcap() error {
+	var e error
+	var msg string
+	for _, ifi := range l.Interfaces {
+		var handle *pcap.Handle
+		handle, e = l.PcapHandle(ifi)
+		if e != nil {
+			msg += ("\n" + e.Error())
+			continue
+		}
+		l.Handles[ifi.Name] = packetHandle{
+			handler: handle,
+			ips:     interfaceIPs(ifi),
+		}
+	}
+	if len(l.Handles) == 0 {
+		return fmt.Errorf("pcap handles error:%s", msg)
+	}
+	return nil
+}
+
+func interfaceIPs(ifi pcap.Interface) []net.IP {
+	var ips []net.IP
+	for _, addr := range ifi.Addresses {
+		ips = append(ips, addr.IP)
+	}
+	return ips
+}
+
+func (l *IPListener) SetPcapOptions(opts PcapOptions) {
+	l.PcapOptions = opts
 }

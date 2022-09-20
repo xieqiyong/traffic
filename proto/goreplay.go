@@ -18,8 +18,8 @@ const (
 
 var PayloadSeparator = "\n🐵🙈🙉\n"
 
-func PayloadHeader(payloadType byte, uuid []byte) (header []byte) {
-	return []byte(fmt.Sprintf("%c %s\n", payloadType, uuid))
+func PayloadHeader(payloadType byte, uuid []byte, timing int64, latency int64) (header []byte) {
+	return []byte(fmt.Sprintf("%c %s %d %d\n", payloadType, uuid, timing, latency))
 }
 
 func PayloadBody(payload []byte) []byte {

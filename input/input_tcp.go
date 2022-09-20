@@ -1,27 +1,39 @@
 package input
 
 import (
-	"log"
-	"net"
+	"context"
 	"perfma-replay/listener"
 	"perfma-replay/message"
-	"perfma-replay/proto"
+	"perfma-replay/size"
+	"perfma-replay/tcp"
+	"sync"
+	"time"
 )
 
 type TCPInput struct {
-	data          chan *proto.TCPMessage
+	sync.Mutex
+	messageStats   []tcp.Stats
+	listener       *listener.IPListener
+	messageParser  *tcp.MessageParser
+	cancelListener context.CancelFunc
+	closed         bool
+	TrackResponse  bool
+	Expire          time.Duration
+	CopyBufferSize  size.Size
+	Stats           bool
+	AllowIncomplete bool
+	Host  string
+	Ports []uint16
+	data          chan *message.HttpMessage
 	address       string
 	quit          chan bool
-	listener      *listener.TCPListener
-	trackResponse bool
 }
 
 func NewTCPInput(address string, trackResponse bool) (i *TCPInput) {
 	i = new(TCPInput)
-	i.data = make(chan *proto.TCPMessage)
+	//i.data = make(chan *proto.TCPMessage)
 	i.address = address
 	i.quit = make(chan bool)
-	i.trackResponse = trackResponse
 	i.listen(address)
 	return
 }
@@ -48,28 +60,28 @@ func (i *TCPInput) PluginReader() (*message.OutPutMessage, error) {
 }
 
 func (i *TCPInput) listen(address string) {
-	log.Println("Listening for traffic on: " + address)
-
-	host, port, err := net.SplitHostPort(address)
-
-	if err != nil {
-		log.Fatal("input-raw: error while parsing address", err)
-	}
-
-	i.listener = listener.NewTCPListener(host, port, i.trackResponse)
-
-	ch := i.listener.Receiver()
-
-	go func() {
-		for {
-			select {
-			case <-i.quit:
-				return
-			default:
-			}
-			// Receiving TCPMessage
-			m := <-ch
-			i.data <- m
-		}
-	}()
+	//log.Println("Listening for traffic on: " + address)
+	//
+	//host, port, err := net.SplitHostPort(address)
+	//
+	//if err != nil {
+	//	log.Fatal("input-raw: error while parsing address", err)
+	//}
+	//
+	//i.listener = listener.NewTCPListener(host, port, i.trackResponse)
+	//
+	//ch := i.listener.Receiver()
+	//
+	//go func() {
+	//	for {
+	//		select {
+	//		case <-i.quit:
+	//			return
+	//		default:
+	//		}
+	//		// Receiving TCPMessage
+	//		m := <-ch
+	//		i.data <- m
+	//	}
+	//}()
 }

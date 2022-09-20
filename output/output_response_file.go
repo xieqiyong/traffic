@@ -64,6 +64,9 @@ func NewFileResponseOutput(pathTemplate string, config *FileOutputConfig) *FileR
 	if strings.Contains(pathTemplate, "%r") {
 		o.requestPerFile = true
 	}
+	if config.FlushInterval == 0 {
+		config.FlushInterval = 100 * time.Millisecond
+	}
 
 	go func() {
 		for {
@@ -158,9 +161,9 @@ func (o *FileResponseOutput) PluginWriter(msg *message.OutPutMessage) (n int, er
 	if flag == false {
 		return 0, nil
 	}
-	o.writer.Write(content)
+	n, err = o.writer.Write(content)
 	o.writer.Write([]byte("\r\n"))
-
+	o.chunkSize += n
 	o.queueLength++
 	return len(content), nil
 }
@@ -229,5 +232,6 @@ func (o *FileResponseOutput) Close() error {
 	}
 
 	o.closed = true
+	o.chunkSize = 0
 	return nil
 }

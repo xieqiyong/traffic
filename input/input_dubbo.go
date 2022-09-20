@@ -1,26 +1,40 @@
 package input
 
 import (
+	"context"
 	"log"
-	"net"
 	"perfma-replay/listener"
 	"perfma-replay/message"
+	"perfma-replay/size"
+	"perfma-replay/tcp"
+	"sync"
+	"time"
 )
 
 type DubboInput struct {
-	data          chan *message.DubboMessage
+	sync.Mutex
+	messageStats   []tcp.Stats
+	listener       *listener.IPListener
+	messageParser  *tcp.MessageParser
+	cancelListener context.CancelFunc
+	closed         bool
+	TrackResponse  bool
+	Expire          time.Duration
+	CopyBufferSize  size.Size
+	Stats           bool
+	AllowIncomplete bool
+	Host  string
+	Ports []uint16
 	address       string
 	quit          chan bool
-	listener      *listener.DubboListener
-	trackResponse bool
 }
 
 func NewDubboMessage(address string, trackResponse bool) (i *DubboInput) {
 	i = new(DubboInput)
-	i.data = make(chan *message.DubboMessage)
+	//i.data = make(chan *message.DubboMessage)
 	i.address = address
 	i.quit = make(chan bool)
-	i.trackResponse = trackResponse
+	//i.trackResponse = trackResponse
 	i.listen(address)
 	return
 }
@@ -48,26 +62,26 @@ func (i *DubboInput) PluginReader() (*message.OutPutMessage, error) {
 func (i *DubboInput) listen(address string) {
 	log.Println("Listening for traffic on: " + address)
 
-	host, port, err := net.SplitHostPort(address)
+	//host, port, err := net.SplitHostPort(address)
 
-	if err != nil {
-		log.Fatal("input-raw: error while parsing address", err)
-	}
+	//if err != nil {
+	//	log.Fatal("input-raw: error while parsing address", err)
+	//}
 
-	i.listener = listener.NewDubboListener(host, port, i.trackResponse)
-
-	ch := i.listener.Receiver()
-
-	go func() {
-		for {
-			select {
-			case <-i.quit:
-				return
-			default:
-			}
-			// Receiving TCPMessage
-			m := <-ch
-			i.data <- m
-		}
-	}()
+	//i.listener = listener.NewDubboListener(host, port, i.trackResponse)
+	//
+	//ch := i.listener.Receiver()
+	//
+	//go func() {
+	//	for {
+	//		select {
+	//		case <-i.quit:
+	//			return
+	//		default:
+	//		}
+	//		// Receiving TCPMessage
+	//		m := <-ch
+	//		i.data <- m
+	//	}
+	//}()
 }

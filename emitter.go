@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"github.com/coocood/freecache"
 	"io"
+	"perfma-replay/byteutils"
 	"perfma-replay/message"
 	"perfma-replay/modifier"
 	"perfma-replay/proto"
@@ -40,7 +42,18 @@ func CopyMulty(src message.PluginReader, writers ...message.PluginWriter) (err e
 			break
 		}
 		if msg != nil && len(msg.Data) > 0 {
+			if len(msg.Data) > int(Settings.CopyBufferSize) {
+				msg.Data = msg.Data[:Settings.CopyBufferSize]
+			}
 			meta := proto.PayloadMeta(msg.Meta)
+
+			if len(meta) < 3 {
+				Debug(2, fmt.Sprintf("[EMITTER] Found malformed record %q from %q", msg.Meta, src))
+				continue
+			}
+			if Settings.Verbose >= 3 {
+				Debug(3, "[EMITTER] input: ", byteutils.SliceToString(msg.Meta[:len(msg.Meta)-1]), " from: ", src)
+			}
 			requestID := meta[1]
 			if(modifierRule != nil){
 				if(proto.IsRequestPayload(msg.Meta)){
@@ -58,9 +71,6 @@ func CopyMulty(src message.PluginReader, writers ...message.PluginWriter) (err e
 				}
 			}
 
-			if len(msg.Data) > int(Settings.CopyBufferSize) {
-				msg.Data = msg.Data[:Settings.CopyBufferSize]
-			}
 			for _, dst := range writers {
 				if _, err := dst.PluginWriter(msg); err != nil && err != io.ErrClosedPipe {
 					return err

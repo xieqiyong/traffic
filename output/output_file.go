@@ -100,6 +100,9 @@ func NewFileOutput(pathTemplate string, config *FileOutputConfig) *FileOutput {
 	if strings.Contains(pathTemplate, "%r") {
 		o.requestPerFile = true
 	}
+	if config.FlushInterval == 0 {
+		config.FlushInterval = 100 * time.Millisecond
+	}
 
 	go func() {
 		for {
@@ -247,6 +250,7 @@ func (o *FileOutput) PluginWriter(msg *message.OutPutMessage) (n int, err error)
 		meta := proto.PayloadMeta(msg.Meta)
 		o.payloadType = meta[0]
 		o.currentID = meta[1]
+
 	}
 	o.updateName()
 	if o.file == nil || o.currentName != o.file.Name() {
@@ -270,9 +274,9 @@ func (o *FileOutput) PluginWriter(msg *message.OutPutMessage) (n int, err error)
 	if flag == false {
 		return 0, nil
 	}
-	o.writer.Write(content)
+	n, err = o.writer.Write(content)
 	o.writer.Write([]byte("\r\n"))
-
+	o.chunkSize += n
 	o.queueLength++
 	return len(content), nil
 }
@@ -323,5 +327,6 @@ func (o *FileOutput) Close() error {
 	}
 
 	o.closed = true
+	o.chunkSize = 0
 	return nil
 }
