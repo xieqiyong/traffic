@@ -1,7 +1,9 @@
 package output
 
 import (
+	"fmt"
 	"perfma-replay/message"
+	"perfma-replay/proto"
 )
 
 // StdOutput used for debugging, prints all incoming requests
@@ -15,10 +17,10 @@ func NewStdOutput() (i *StdOutput) {
 }
 
 func (i *StdOutput) PluginWriter(msg *message.OutPutMessage) (int, error) {
-	//meta := proto.PayloadMeta(msg.Meta)
-	//if string(meta[0]) == "2" {
-	//	fmt.Println(string(msg.Data))
-	//}
+	meta := proto.PayloadMeta(msg.Meta)
+	if string(meta[0]) == "2" {
+		fmt.Println(string(msg.Data))
+	}
 	return len(msg.Data), nil
 }
 
