@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"perfma-replay/core"
 	"perfma-replay/proto"
 	"strconv"
@@ -96,7 +97,7 @@ func (f *FileHttpRequestMessage) AssembleHttpRequestData(message *OutPutMessage,
 	}
 	f.Header = req.Header
 	f.Cookie = cookies
-	f.Body = string(body)
+	f.Body, _ = (url.QueryUnescape(string(body)))
 	f.Method = req.Method
 	f.Host = req.Host
 	f.CreateTime = carbon.Now().ToDateTimeString()
