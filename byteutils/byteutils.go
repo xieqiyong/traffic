@@ -4,6 +4,7 @@ package byteutils
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"unsafe"
 )
 
@@ -13,6 +14,14 @@ func Cut(a []byte, from, to int) []byte {
 	a = a[:len(a)-to+from]
 
 	return a
+}
+
+func JSONMarshal(t interface{}) ([]byte, error) {
+	buffer := &bytes.Buffer{}
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	err := encoder.Encode(t)
+	return buffer.Bytes(), err
 }
 
 // Insert new slice at specified position

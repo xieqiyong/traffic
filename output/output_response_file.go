@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"perfma-replay/byteutils"
 	"perfma-replay/listener"
 
 	"io"
@@ -184,7 +185,8 @@ func AssembleResponse(msg *message.OutPutMessage) ([]byte, bool) {
 		if string(meta[0]) == "2" {
 			handlerMessage := message.FileHttpResponseMessage{}
 			noData := handlerMessage.AssembleHttpResponseData(msg, currentID)
-			content, _ := json.Marshal(handlerMessage)
+			//content, _ := json.Marshal(handlerMessage)
+			content, _ := byteutils.JSONMarshal(handlerMessage)
 			return content, noData
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"perfma-replay/byteutils"
 	"perfma-replay/listener"
 	"perfma-replay/message"
 	"perfma-replay/proto"
@@ -238,7 +239,8 @@ func Assemble(msg *message.OutPutMessage) ([]byte, bool) {
 		if string(meta[0]) == "1" {
 			handlerMessage := message.FileHttpRequestMessage{}
 			noData := handlerMessage.AssembleHttpRequestData(msg, currentID)
-			content, _ := json.Marshal(handlerMessage)
+			//content, _ := json.Marshal(handlerMessage)
+			content, _ := byteutils.JSONMarshal(handlerMessage)
 			return content, noData
 		}
 	}
