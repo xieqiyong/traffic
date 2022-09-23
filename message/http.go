@@ -3,6 +3,7 @@ package message
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"github.com/golang-module/carbon/v2"
 	"io"
 	"io/ioutil"
@@ -93,11 +94,12 @@ func (f *FileHttpRequestMessage) AssembleHttpRequestData(message *OutPutMessage,
 	cookie := req.Cookies()
 	var cookies string
 	for i := range cookie {
-		cookies += cookie[i].Value
+		_cookie,_ := url.QueryUnescape(cookie[i].Value)
+		cookies += _cookie
 	}
 	f.Header = req.Header
 	f.Cookie = cookies
-	f.Body, _ = (url.QueryUnescape(string(body)))
+	f.Body, _ = url.QueryUnescape(string(body))
 	f.Method = req.Method
 	f.Host = req.Host
 	f.CreateTime = carbon.Now().ToDateTimeString()
@@ -156,8 +158,18 @@ func (f *FileHttpResponseMessage) AssembleHttpResponseData(message *OutPutMessag
 	fixPragmaCacheControl(f.Header)
 	nowLine := len(f.Header) + 2
 	// Parse the response body
-	body := ReadResponseBody(message.Data, nowLine)
-
+	var body string
+	body = ReadResponseBody(message.Data, nowLine)
+	// if content-type
+	value, isOk := f.Header["Content-Encoding"];
+	if(isOk){
+		if value[0] == "gzip"{
+			byteBody   := bytes.NewReader([]byte(body))
+			newBody, _ := gzip.NewReader(byteBody)
+			ioBody, _  := ioutil.ReadAll(newBody)
+			body = string(ioBody)
+		}
+	}
 	f.PayloadType = string(proto.ResponsePayload)
 	f.CreateTime = carbon.Now().ToDateTimeString()
 	f.Token = string(currentID)

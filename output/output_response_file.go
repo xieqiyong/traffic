@@ -162,7 +162,7 @@ func (o *FileResponseOutput) PluginWriter(msg *message.OutPutMessage) (n int, er
 		return 0, nil
 	}
 	n, err = o.writer.Write(content)
-	//o.writer.Write([]byte("\r\n"))
+	o.writer.Write([]byte("\r\n"))
 	o.chunkSize += n
 	o.queueLength++
 	return len(content), nil
@@ -184,8 +184,8 @@ func AssembleResponse(msg *message.OutPutMessage) ([]byte, bool) {
 		if string(meta[0]) == "2" {
 			handlerMessage := message.FileHttpResponseMessage{}
 			noData := handlerMessage.AssembleHttpResponseData(msg, currentID)
-			//content, _ := json.Marshal(handlerMessage)
-			return msg.Data, noData
+			content, _ := json.Marshal(handlerMessage)
+			return content, noData
 		}
 	}
 	return nil, false
