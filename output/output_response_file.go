@@ -202,7 +202,7 @@ func (o *FileResponseOutput) PluginWriter(msg *message.OutPutMessage) (n int, er
 	o.Lock()
 	defer o.Unlock()
 	if o.file == nil || o.currentName != o.file.Name() {
-		//o.closeLocked()
+		o.closeLocked()
 		o.file, err = os.OpenFile(o.currentName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 		o.file.Sync()
 		if strings.HasSuffix(o.currentName, ".gz") {
