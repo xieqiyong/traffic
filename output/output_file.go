@@ -62,7 +62,8 @@ type FileOutputConfig struct {
 	SizeLimit     unitSizeVar      `json:"output-file-size-limit"`
 	QueueLimit    int			   `json:"output-file-queue-limit"`
 	Append         bool			   `json:"output-file-append"`
-	onClose func(string)
+	onClose      func(string)
+	onResClose   func(string)
 }
 // FileOutput output plugin
 type FileOutput struct {

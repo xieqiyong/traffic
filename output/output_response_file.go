@@ -267,8 +267,8 @@ func (o *FileResponseOutput) closeLocked() error {
 			o.writer.(*bufio.Writer).Flush()
 		}
 		o.file.Close()
-		if o.config.onClose != nil {
-			o.config.onClose(o.file.Name())
+		if o.config.onResClose != nil {
+			o.config.onResClose(o.file.Name())
 		}
 	}
 	o.closed = true
