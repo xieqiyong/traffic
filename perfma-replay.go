@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -12,8 +11,6 @@ import (
 	"syscall"
 	"time"
 )
-
-var closeCh chan int
 
 func main() {
 	//err := Settings.inputHttp.Set(":9527")
@@ -28,53 +25,52 @@ func main() {
 	//if err != nil {
 	//	return
 	//}
-	////Settings.outputStdout = true;
+	//Settings.outputStdout = true;
 	//Settings.trackResponse = true;
 	//Settings.modifierConfig.URLRegexp.Set("/api/*")
 	// add line number to log
+	//Settings.trackResponse = false
+	Settings.PcapOptions.Snaplen = true
 	if os.Getenv("GOMAXPROCS") == "" {
 		runtime.GOMAXPROCS(runtime.NumCPU() * 2)
 	}
-
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-	if !flag.Parsed() {
-		flag.Parse()
-	}
-
-	InitPlugins()
-	fmt.Printf("input and output nums: %d - %d\n", len(Plugins.Inputs), len(Plugins.Outputs))
-
-	if len(Plugins.Inputs) == 0 || len(Plugins.Outputs) == 0 {
+	var plugins *InOutPlugins
+	flag.Parse()
+	fmt.Println(Settings.trackResponse)
+	fmt.Println(Settings.outputFileConfig.SizeLimit)
+	fmt.Println(Settings.outputFileConfig.QueueLimit)
+	fmt.Println(Settings.outputFileConfig.FlushInterval)
+	fmt.Println(Settings.PcapOptions.Snaplen)
+	checkSettings()
+	plugins = InitPlugins()
+	fmt.Printf("input and output nums: %d - %d\n", len(plugins.Inputs), len(plugins.Outputs))
+	if len(plugins.Inputs) == 0 || len(plugins.Outputs) == 0 {
 		log.Fatal("Required at least 1 input and 1 output")
-	}
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		finalize()
-		os.Exit(1)
-	}()
-
-	if Settings.exitAfter > 0 {
-		log.Println("Running gor for a duration of", Settings.exitAfter)
-		closeCh = make(chan int)
-
-		time.AfterFunc(Settings.exitAfter, func() {
-			log.Println("Stopping gor after", Settings.exitAfter)
-			close(closeCh)
-		})
 	}
 	// 传递协议
 	listener.BizProtocolType = Settings.bizProtocol[0]
-	Start(closeCh)
 
-}
+	closeCh := make(chan int)
+	emitter := NewEmitter()
+	go emitter.Start(plugins)
+	if Settings.exitAfter > 0 {
+		log.Printf("Running gor for a duration of %s\n", Settings.exitAfter)
 
-func finalize() {
-	for _, p := range Plugins.All {
-		if cp, ok := p.(io.Closer); ok {
-			cp.Close()
-		}
+		time.AfterFunc(Settings.exitAfter, func() {
+			log.Printf("gor run timeout %s\n", Settings.exitAfter)
+			close(closeCh)
+		})
 	}
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	exit := 0
+	select {
+	case <-c:
+		exit = 1
+	case <-closeCh:
+		exit = 0
+	}
+	emitter.Close()
+	os.Exit(exit)
+
 }

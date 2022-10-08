@@ -66,7 +66,13 @@ type AppSettings struct {
 // Settings holds Goreplay configuration
 var Settings AppSettings
 
+func usage() {
+	flag.PrintDefaults()
+	os.Exit(2)
+}
+
 func init() {
+	flag.Usage = usage
 	flag.DurationVar(&Settings.exitAfter, "exit-after", 0, "exit after specified duration")
 
 	flag.BoolVar(&Settings.splitOutput, "split-output", false, "By default each output gets same traffic. If set to `true` it splits traffic equally among all outputs")
@@ -107,7 +113,7 @@ func init() {
 	flag.BoolVar(&Settings.outputKafkaConfig.UseJSON, "output-kafka-json-format", false, "If turned on, it will serialize messages from GoReplay text format to JSON.")
 
 	// 是否录制响应
-	flag.BoolVar(&Settings.trackResponse, "input-raw-track-response", true,"track response")
+	flag.BoolVar(&Settings.trackResponse, "input-raw-track-response", false,"track response")
 
 	flag.Var(&Settings.CopyBufferSize, "copy-buffer-size", "Set the buffer size for an individual request (default 5MB)")
 
@@ -132,5 +138,14 @@ func Debug(level int, args ...interface{}) {
 		previousDebugTime = now
 		fmt.Fprintf(os.Stderr, "[DEBUG][elapsed %s]: ", diff)
 		fmt.Fprintln(os.Stderr, args...)
+	}
+}
+
+func checkSettings() {
+	if Settings.outputFileConfig.SizeLimit < 1 {
+		Settings.outputFileConfig.SizeLimit.Set("32mb")
+	}
+	if Settings.CopyBufferSize < 1 {
+		Settings.CopyBufferSize.Set("5mb")
 	}
 }

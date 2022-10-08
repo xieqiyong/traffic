@@ -7,24 +7,48 @@ import (
 	"perfma-replay/message"
 	"perfma-replay/modifier"
 	"perfma-replay/proto"
+	"sync"
 	"time"
 )
 
+func NewEmitter() *Emitter {
+	return &Emitter{}
+}
+
+type Emitter struct {
+	sync.WaitGroup
+	plugins *InOutPlugins
+}
 // Start initialize loop for sending data from inputs to outputs
-func Start(stop chan int) {
+func (e *Emitter) Start(plugins *InOutPlugins) {
 
-	for _, in := range Plugins.Inputs {
-		go CopyMulty(in, Plugins.Outputs...)
+	if Settings.CopyBufferSize < 1 {
+		Settings.CopyBufferSize = 5 << 20
 	}
+	e.plugins = plugins
 
-	for {
-		select {
-		case <-stop:
-			finalize()
-			return
-		case <-time.After(100 * time.Millisecond):
+	for _, in := range plugins.Inputs {
+		e.Add(1)
+		go func(in message.PluginReader) {
+			defer e.Done()
+			if err := CopyMulty(in, plugins.Outputs...); err != nil {
+				Debug(2, fmt.Sprintf("[EMITTER] error during copy: %q", err))
+			}
+		}(in)
+	}
+}
+
+func (e *Emitter) Close() {
+	for _, p := range e.plugins.All {
+		if cp, ok := p.(io.Closer); ok {
+			cp.Close()
 		}
 	}
+	if len(e.plugins.All) > 0 {
+		// wait for everything to stop
+		e.Wait()
+	}
+	e.plugins.All = nil // avoid Close to make changes again
 }
 
 // CopyMulty copies from 1 reader to multiple writers

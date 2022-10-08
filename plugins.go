@@ -6,7 +6,6 @@ import (
 	"perfma-replay/output"
 	"reflect"
 	"strings"
-	"sync"
 )
 
 // InOutPlugins struct for holding references to plugins
@@ -16,10 +15,8 @@ type InOutPlugins struct {
 	All     []interface{}
 }
 
-var pluginMu sync.Mutex
-
 // Plugins holds all the plugin objects
-var Plugins = new(InOutPlugins)
+//var Plugins = new(InOutPlugins)
 
 // extractLimitOptions detects if plugin get called with limiter support
 // Returns address and limit
@@ -36,7 +33,7 @@ func extractLimitOptions(options string) (string, string) {
 // Automatically detects type of plugin and initialize it
 //
 // See this article if curious about reflect stuff below: http://blog.burntsushi.net/type-parametric-functions-golang
-func registerPlugin(constructor interface{}, options ...interface{}) {
+func (plugins *InOutPlugins)registerPlugin(constructor interface{}, options ...interface{}) {
 	var path, limit string
 	vc := reflect.ValueOf(constructor)
 
@@ -60,59 +57,50 @@ func registerPlugin(constructor interface{}, options ...interface{}) {
 	if limit != "" {
 		plugin = NewLimiter(plugin, limit)
 	}
-
-	_, isR := plugin.(message.PluginReader)
-	_, isW := plugin.(message.PluginWriter)
-
-	// Some of the output can be Readers as well because return responses
-	if isR && !isW {
-		Plugins.Inputs = append(Plugins.Inputs, plugin.(message.PluginReader))
+	if r, ok := plugin.(message.PluginReader); ok {
+		plugins.Inputs = append(plugins.Inputs, r)
 	}
-
-	if isW {
-		Plugins.Outputs = append(Plugins.Outputs, plugin.(message.PluginWriter))
+	if w, ok := plugin.(message.PluginWriter); ok {
+		plugins.Outputs = append(plugins.Outputs, w)
 	}
-
-	Plugins.All = append(Plugins.All, plugin)
+	plugins.All = append(plugins.All, plugin)
 }
 
 // InitPlugins specify and initialize all available plugins
-func InitPlugins() {
-	pluginMu.Lock()
-	defer pluginMu.Unlock()
-
+func InitPlugins() *InOutPlugins{
+	plugins := new(InOutPlugins)
 	for _, options := range Settings.inputTCP {
-		registerPlugin(input.NewTCPInput, options, false)
+		plugins.registerPlugin(input.NewTCPInput, options, false)
 	}
 
 	for _, options := range Settings.inputDubbo {
-		registerPlugin(input.NewDubboMessage, options, false)
+		plugins.registerPlugin(input.NewDubboMessage, options, false)
 	}
 
 	for _, options := range Settings.inputHttp {
-		registerPlugin(input.NewHttpMessage, options, Settings.trackResponse, Settings.CopyBufferSize)
+		plugins.registerPlugin(input.NewHttpMessage, options, Settings.trackResponse, Settings.CopyBufferSize)
 	}
-
 	for _, options := range Settings.inputFile {
-		registerPlugin(input.NewFileInput, options, Settings.inputFileLoop)
+		plugins.registerPlugin(input.NewFileInput, options, Settings.inputFileLoop)
 	}
 	if Settings.outputStdout {
-		registerPlugin(output.NewStdOutput)
+		plugins.registerPlugin(output.NewStdOutput)
 	}
 
 	for _, options := range Settings.outputFile {
-		registerPlugin(output.NewFileOutput, options, &Settings.outputFileConfig)
+		plugins.registerPlugin(output.NewFileOutput, options, &Settings.outputFileConfig)
 	}
 
 	for _, options := range Settings.outputResponseFile {
-		registerPlugin(output.NewFileResponseOutput, options, &Settings.outputFileConfig)
+		plugins.registerPlugin(output.NewFileResponseOutput, options, &Settings.outputFileConfig)
 	}
 
 	for _, options := range Settings.outputTCP {
-		registerPlugin(output.NewTCPOutput, options, &Settings.tcpOutputConfig)
+		plugins.registerPlugin(output.NewTCPOutput, options, &Settings.tcpOutputConfig)
 	}
 
 	if Settings.outputKafkaConfig.Topic != "" && Settings.outputKafkaConfig.Host != "" {
-		registerPlugin(output.NewKafkaOutput, "", &Settings.outputKafkaConfig, &Settings.KafkaTLSConfig)
+		plugins.registerPlugin(output.NewKafkaOutput, "", &Settings.outputKafkaConfig, &Settings.KafkaTLSConfig)
 	}
+	return plugins
 }

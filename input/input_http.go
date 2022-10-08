@@ -62,6 +62,7 @@ func NewHttpMessage(address string, trackResponse bool, copyBufferSize size.Size
 	i.Ports = ports
 	i.TrackResponse = trackResponse
 	i.CopyBufferSize = copyBufferSize
+	i.PcapOptions.Snaplen = true
 	i.listen(address)
 	return
 }
