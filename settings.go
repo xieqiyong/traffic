@@ -115,6 +115,8 @@ func init() {
 	flag.Var(&Settings.PcapOptions.BufferSize, "input-raw-buffer-size", "Controls size of the OS buffer which holds packets until they dispatched. Default value depends by system: in Linux around 2MB. If you see big package drop, increase this value.")
 	flag.BoolVar(&Settings.PcapOptions.Promiscuous, "input-raw-promisc", false, "enable promiscuous mode")
 	flag.BoolVar(&Settings.PcapOptions.Monitor, "input-raw-monitor", false, "enable RF monitor mode")
+	flag.BoolVar(&Settings.PcapOptions.Snaplen, "input-raw-override-snaplen", false, "Override the capture snaplen to be 64k. Required for some Virtualized environments")
+
 	Settings.CopyBufferSize = 5242880
 	Settings.outputFileConfig.SizeLimit = 33554432
 }
