@@ -44,7 +44,7 @@ type FileHttpRequestMessage struct {
 type Header map[string][]string
 
 type FileHttpResponseMessage struct {
-	Status           string               `json:"Status"`     // e.g. "200 OK"
+	Status           string               `json:"status"`     // e.g. "200 OK"
 	StatusCode       int                  `json:"statusCode"` // e.g. 200
 	Proto            string               `json:"proto"`      // e.g. "HTTP/1.0"
 	ProtoMajor       int                  `json:"protoMajor"` // e.g. 1
