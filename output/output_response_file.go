@@ -36,10 +36,6 @@ var dateFileResponseNameFuncs = map[string]func(*FileResponseOutput) string{
 	"%t":  func(o *FileResponseOutput) string { return string(o.payloadType) },
 }
 
-
-
-
-
 // FileResponse output plugin
 type FileResponseOutput struct {
 	sync.RWMutex
@@ -54,7 +50,7 @@ type FileResponseOutput struct {
 	closed          bool
 	currentFileSize int
 	totalFileSize   size.Size
-	config *FileOutputConfig
+	config          *FileOutputConfig
 }
 
 // NewFileResponseOutput constructor for FileOutput, accepts path
@@ -112,7 +108,9 @@ func httpResponseWithoutIndex(s string) string {
 	}
 	return s
 }
+
 type httpResponseSortByFileIndex []string
+
 func (s httpResponseSortByFileIndex) Len() int {
 	return len(s)
 }
@@ -165,6 +163,7 @@ func (o *FileResponseOutput) updateName() {
 	o.currentName = name
 	o.Unlock()
 }
+
 // 解析请求数据
 func AssembleResponse(msg *message.OutPutMessage) ([]byte, bool) {
 	if listener.Dubbo == listener.BizProtocolType {
@@ -181,7 +180,8 @@ func AssembleResponse(msg *message.OutPutMessage) ([]byte, bool) {
 		currentID := meta[1]
 		if string(meta[0]) == "2" {
 			handlerMessage := message.FileHttpResponseMessage{}
-			noData := handlerMessage.AssembleHttpResponseData(msg, currentID)
+			noData := handlerMessage.NewAssembleHttpResponseData(msg)
+			handlerMessage.Token = string(currentID)
 			//content, _ := json.Marshal(handlerMessage)
 			content, _ := byteutils.JSONMarshal(handlerMessage)
 			return content, noData

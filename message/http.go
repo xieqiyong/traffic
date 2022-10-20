@@ -38,28 +38,29 @@ type FileHttpRequestMessage struct {
 	Url         string              `json:"url"`
 	CreateTime  string              `json:"createTime"`
 	PayloadType string              `json:"payloadType"`
-	Token   	string              `json:"token"`
+	Token       string              `json:"token"`
 }
 
 type Header map[string][]string
 
 type FileHttpResponseMessage struct {
-	Status           string               `json:"status"`     // e.g. "200 OK"
-	StatusCode       int                  `json:"statusCode"` // e.g. 200
-	Proto            string               `json:"proto"`      // e.g. "HTTP/1.0"
-	ProtoMajor       int                  `json:"protoMajor"` // e.g. 1
-	ProtoMinor       int                  `json:"protoMinor"` // e.g. 0
-	Header           Header               `json:"header"`
-	Body             string               `json:"body"`
+	Status     string `json:"status"`     // e.g. "200 OK"
+	StatusCode int    `json:"statusCode"` // e.g. 200
+	Proto      string `json:"proto"`      // e.g. "HTTP/1.0"
+	ProtoMajor int    `json:"protoMajor"` // e.g. 1
+	ProtoMinor int    `json:"protoMinor"` // e.g. 0
+	Header     Header `json:"header"`
+	Body       string `json:"body"`
+	Cookie     string `json:"cookie"`
 	//ContentLength    int64                `json:"contentLength"`
 	//TransferEncoding []string             `json:"transferEncoding"`
 	//Close            bool                 `json:"close"`
 	//Uncompressed     bool                 `json:"uncompressed"`
 	//Trailer          Header               `json:"trailer"`
 	//TLS              *tls.ConnectionState `json:"tLS"`
-	PayloadType      string               `json:"payloadType"`
-	CreateTime       string               `json:"createTime"`
-	Token   		 string              `json:"token"`
+	PayloadType string `json:"payloadType"`
+	CreateTime  string `json:"createTime"`
+	Token       string `json:"token"`
 }
 
 func NewHttpMessage(data []byte, isIncoming bool, newPacket core.NewPacket) (m *HttpMessage) {
@@ -94,7 +95,7 @@ func (f *FileHttpRequestMessage) AssembleHttpRequestData(message *OutPutMessage,
 	cookie := req.Cookies()
 	var cookies string
 	for i := range cookie {
-		_cookie,_ := url.QueryUnescape(cookie[i].Value)
+		_cookie, _ := url.QueryUnescape(cookie[i].Value)
 		cookies += _cookie
 	}
 	f.Header = req.Header
@@ -161,12 +162,12 @@ func (f *FileHttpResponseMessage) AssembleHttpResponseData(message *OutPutMessag
 	var body string
 	body = ReadResponseBody(message.Data, nowLine)
 	// if content-type
-	value, isOk := f.Header["Content-Encoding"];
-	if(isOk){
-		if value[0] == "gzip"{
-			byteBody   := bytes.NewReader([]byte(body))
+	value, isOk := f.Header["Content-Encoding"]
+	if isOk {
+		if value[0] == "gzip" {
+			byteBody := bytes.NewReader([]byte(body))
 			newBody, _ := gzip.NewReader(byteBody)
-			ioBody, _  := ioutil.ReadAll(newBody)
+			ioBody, _ := ioutil.ReadAll(newBody)
 			body = string(ioBody)
 		}
 	}
@@ -174,6 +175,39 @@ func (f *FileHttpResponseMessage) AssembleHttpResponseData(message *OutPutMessag
 	f.CreateTime = carbon.Now().ToDateTimeString()
 	f.Token = string(currentID)
 	f.Body = body
+	return true
+}
+
+func (f *FileHttpResponseMessage) NewAssembleHttpResponseData(message *OutPutMessage) bool {
+	responseSingleton, _ := http.ReadResponse(bufio.NewReader(bytes.NewReader(message.Data)), nil)
+	contentType := responseSingleton.Header.Get("Content-Type")
+	if contentType != "" {
+		if strings.Contains(contentType, "image") {
+			return false
+		}
+	}
+	isGzip := responseSingleton.Header.Get("Content-Encoding")
+	isCookie := responseSingleton.Header.Get("Set-Cookie")
+	bodyStr, _ := ioutil.ReadAll(responseSingleton.Body)
+	var ioBody string
+	if isGzip != "" {
+		if strings.Contains(isGzip, "gzip") {
+			byteBody := bytes.NewReader(bodyStr)
+			newBody, _ := gzip.NewReader(byteBody)
+			ioBodyByte, _ := ioutil.ReadAll(newBody)
+			ioBody = string(ioBodyByte)
+		}
+	}
+	f.Body = ioBody
+	f.StatusCode = responseSingleton.StatusCode
+	f.Header = Header(responseSingleton.Header)
+	f.Status = responseSingleton.Status
+	f.CreateTime = carbon.Now().String()
+	f.Proto = responseSingleton.Proto
+	f.ProtoMajor = responseSingleton.ProtoMajor
+	f.ProtoMinor = responseSingleton.ProtoMinor
+	f.PayloadType = "2"
+	f.Cookie = isCookie
 	return true
 }
 

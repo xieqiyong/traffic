@@ -1,4 +1,5 @@
 package output
+
 import (
 	"bufio"
 	"compress/gzip"
@@ -8,7 +9,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"perfma-replay/byteutils"
 	"perfma-replay/listener"
 	"perfma-replay/message"
 	"perfma-replay/proto"
@@ -20,12 +20,16 @@ import (
 	"sync"
 	"time"
 )
+
 type unitSizeVar int64
+
 var dataUnitMap = map[byte]int64{
 	'k': 1024,
 	'm': 1024 * 1024,
 	'g': 1024 * 1024 * 1024,
 }
+var payloadSeparatorAsBytes = []byte(proto.PayloadSeparator)
+
 func parseDataUnit(s string) int64 {
 	// Allow kb, mb, gb
 	if strings.HasSuffix(s, "b") {
@@ -46,6 +50,7 @@ func (u *unitSizeVar) Set(s string) error {
 	*u = unitSizeVar(parseDataUnit(s))
 	return nil
 }
+
 var dateFileNameFuncs = map[string]func(*FileOutput) string{
 	"%Y":  func(o *FileOutput) string { return time.Now().Format("2006") },
 	"%m":  func(o *FileOutput) string { return time.Now().Format("01") },
@@ -57,14 +62,16 @@ var dateFileNameFuncs = map[string]func(*FileOutput) string{
 	"%r":  func(o *FileOutput) string { return string(o.currentID) },
 	"%t":  func(o *FileOutput) string { return string(o.payloadType) },
 }
+
 type FileOutputConfig struct {
-	FlushInterval time.Duration    `json:"output-file-flush-interval"`
-	SizeLimit     unitSizeVar      `json:"output-file-size-limit"`
-	QueueLimit    int			   `json:"output-file-queue-limit"`
-	Append         bool			   `json:"output-file-append"`
-	onClose      func(string)
-	onResClose   func(string)
+	FlushInterval time.Duration `json:"output-file-flush-interval"`
+	SizeLimit     unitSizeVar   `json:"output-file-size-limit"`
+	QueueLimit    int           `json:"output-file-queue-limit"`
+	Append        bool          `json:"output-file-append"`
+	onClose       func(string)
+	onResClose    func(string)
 }
+
 // FileOutput output plugin
 type FileOutput struct {
 	sync.RWMutex
@@ -79,8 +86,9 @@ type FileOutput struct {
 	closed          bool
 	currentFileSize int
 	totalFileSize   size.Size
-	config *FileOutputConfig
+	config          *FileOutputConfig
 }
+
 // NewFileOutput constructor for FileOutput, accepts path
 func NewFileOutput(pathTemplate string, config *FileOutputConfig) *FileOutput {
 	o := new(FileOutput)
@@ -96,7 +104,7 @@ func NewFileOutput(pathTemplate string, config *FileOutputConfig) *FileOutput {
 	go func() {
 		for {
 			time.Sleep(config.FlushInterval)
-			if o.IsClosed(){
+			if o.IsClosed() {
 				break
 			}
 			o.updateName()
@@ -132,7 +140,9 @@ func withoutIndex(s string) string {
 	}
 	return s
 }
+
 type sortByFileIndex []string
+
 func (s sortByFileIndex) Len() int {
 	return len(s)
 }
@@ -185,28 +195,29 @@ func (o *FileOutput) updateName() {
 	o.currentName = name
 	o.Unlock()
 }
+
 // 解析请求数据
-func Assemble(msg *message.OutPutMessage) ([]byte, bool) {
+func Assemble(msg *message.OutPutMessage) ([]byte, []byte, bool) {
 	if listener.Dubbo == listener.BizProtocolType {
 		handlerMessage := message.DubboOutPutFile{}
 		noData := handlerMessage.AssembleDubboData(msg)
 		content, err := json.Marshal(handlerMessage)
 		if err != nil {
-			return nil, false
+			return nil, nil, false
 		}
-		return content, noData
+		return content, nil, noData
 	}
 	if listener.Http == listener.BizProtocolType {
 		meta := proto.PayloadMeta(msg.Meta)
-		currentID := meta[1]
+		//currentID := meta[1]
 		if string(meta[0]) == "1" {
-			handlerMessage := message.FileHttpRequestMessage{}
-			noData := handlerMessage.AssembleHttpRequestData(msg, currentID)
-			content, _ := byteutils.JSONMarshal(handlerMessage)
-			return content, noData
+			//handlerMessage := message.FileHttpRequestMessage{}
+			//noData := handlerMessage.AssembleHttpRequestData(msg, currentID)
+			//content, _ := byteutils.JSONMarshal(handlerMessage)
+			return msg.Meta, msg.Data, true
 		}
 	}
-	return nil, false
+	return nil, nil, false
 }
 func (o *FileOutput) PluginWriter(msg *message.OutPutMessage) (n int, err error) {
 	if o.requestPerFile {
@@ -234,12 +245,18 @@ func (o *FileOutput) PluginWriter(msg *message.OutPutMessage) (n int, err error)
 		o.QueueLength = 0
 	}
 	// 组装数据
-	content, flag := Assemble(msg)
+	msgMeta, content, flag := Assemble(msg)
+
 	if flag == false {
 		return 0, nil
 	}
-	n, err = o.writer.Write(content)
-	o.writer.Write([]byte("\r"))
+	var nn int
+	n, err = o.writer.Write(msgMeta)
+	nn, err = o.writer.Write(content)
+	n += nn
+	nn, err = o.writer.Write(payloadSeparatorAsBytes)
+	n += nn
+	o.totalFileSize += size.Size(n)
 	o.currentFileSize += n
 	o.QueueLength++
 	return n, nil

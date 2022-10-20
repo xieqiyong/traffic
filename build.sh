@@ -9,14 +9,14 @@ cd libpcap-$PCAPV &&
 make &&
 PACKAGE_NAME=${PWD}
 echo "动态库编译成功，路径：${PACKAGE_NAME}..."
-sleep 3
+sleep 1
 echo "开始执行打包"
 cd ${MAKE_NAME}
 export LD_LIBRARY_PATH="-L ${PACKAGE_NAME}"
 export CGO_LDFLAGS="-L ${PACKAGE_NAME}"
 export CGO_CPPFLAGS="-I ${PACKAGE_NAME}"
 go build .
-sleep 3
+sleep 1
 rm -rf libpcap-${PCAPV}*
 echo "构建成功"
 
