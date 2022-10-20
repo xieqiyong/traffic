@@ -36,11 +36,6 @@ func main() {
 	}
 	var plugins *InOutPlugins
 	flag.Parse()
-	fmt.Println(Settings.trackResponse)
-	fmt.Println(Settings.outputFileConfig.SizeLimit)
-	fmt.Println(Settings.outputFileConfig.QueueLimit)
-	fmt.Println(Settings.outputFileConfig.FlushInterval)
-	fmt.Println(Settings.PcapOptions.Snaplen)
 	checkSettings()
 	plugins = InitPlugins()
 	fmt.Printf("input and output nums: %d - %d\n", len(plugins.Inputs), len(plugins.Outputs))

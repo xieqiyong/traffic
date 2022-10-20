@@ -189,7 +189,7 @@ func (f *FileHttpResponseMessage) NewAssembleHttpResponseData(message *OutPutMes
 	isGzip := responseSingleton.Header.Get("Content-Encoding")
 	isCookie := responseSingleton.Header.Get("Set-Cookie")
 	bodyStr, _ := ioutil.ReadAll(responseSingleton.Body)
-	var ioBody string
+	ioBody := string(bodyStr)
 	if isGzip != "" {
 		if strings.Contains(isGzip, "gzip") {
 			byteBody := bytes.NewReader(bodyStr)

@@ -180,8 +180,8 @@ func AssembleResponse(msg *message.OutPutMessage) ([]byte, bool) {
 		currentID := meta[1]
 		if string(meta[0]) == "2" {
 			handlerMessage := message.FileHttpResponseMessage{}
-			noData := handlerMessage.AssembleHttpResponseData(msg, currentID)
-			//handlerMessage.Token = string(currentID)
+			noData := handlerMessage.NewAssembleHttpResponseData(msg)
+			handlerMessage.Token = string(currentID)
 			//content, _ := json.Marshal(handlerMessage)
 			content, _ := byteutils.JSONMarshal(handlerMessage)
 			return content, noData
