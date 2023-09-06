@@ -47,6 +47,7 @@ const (
 )
 
 var stats *expvar.Map
+
 func init() {
 	stats = expvar.NewMap("raw")
 	stats.Init()
@@ -60,24 +61,24 @@ type IPListener struct {
 	// IP to listen
 	addr string
 	// Port to listen
-	ports []uint16
-	trackResponse bool
-	Interfaces []pcap.Interface
-	ipPacketsChan chan *ipPacket
-	readyChan chan bool
-	transport string
+	ports           []uint16
+	trackResponse   bool
+	Interfaces      []pcap.Interface
+	ipPacketsChan   chan *ipPacket
+	readyChan       chan bool
+	transport       string
 	protocol        tcp.TCPProtocol
 	messages        chan *tcp.Message
-	Transport     string
-	host string
-	Reading    chan bool
-	Handles    map[string]packetHandle
-	closeDone chan struct{}
-	quit      chan struct{}
+	Transport       string
+	host            string
+	Reading         chan bool
+	Handles         map[string]packetHandle
+	closeDone       chan struct{}
+	quit            chan struct{}
 	expiry          time.Duration
 	allowIncomplete bool
-	loopIndex  int
-	Activate   func() error
+	loopIndex       int
+	Activate        func() error
 	PcapOptions
 }
 
@@ -261,6 +262,9 @@ func (l *IPListener) readPcap() {
 					}
 				default:
 					data, ci, err := hndl.handler.ReadPacketData()
+					log.Println("原始数据=====")
+					log.Println("数据流：" + string(data))
+					log.Println("结束=====")
 					if err == nil {
 						messageParser.PacketHandler(&tcp.PcapPacket{
 							Data:     data,
@@ -371,8 +375,6 @@ func http1EndHint(m *tcp.Message) bool {
 	return proto.HasFullPayload(m, m.PacketData()...)
 }
 
-
-
 func portsFilter(transport string, direction string, ports []uint16) string {
 	if len(ports) == 0 || ports[0] == 0 {
 		return fmt.Sprintf("%s %s portrange 0-%d", transport, direction, 1<<16-1)
@@ -440,7 +442,6 @@ func (l *IPListener) Filter(ifi pcap.Interface) (filter string) {
 
 	return
 }
-
 
 func (l *IPListener) Messages() chan *tcp.Message {
 	return l.messages
@@ -617,7 +618,6 @@ func (l *IPListener) PcapHandle(ifi pcap.Interface) (handle *pcap.Handle, err er
 	}
 	return
 }
-
 
 func (l *IPListener) activatePcap() error {
 	var e error

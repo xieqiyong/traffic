@@ -25,5 +25,8 @@ All credit goes to Leonid Bugaev, [@buger](https://twitter.com/buger), https://l
 ```
 
 #Compile
+    yum install bison
+    yum install gcc
+    yum install flex
     CGO_ENABLED=1 GOOS=linux  GOARCH=amd64  CC=x86_64-linux-musl-gcc  CXX=x86_64-linux-musl-g++ go build -o BIN_NAME
 
