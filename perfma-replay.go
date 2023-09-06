@@ -13,18 +13,18 @@ import (
 )
 
 func main() {
-	err := Settings.inputHttp.Set(":17922")
-	Settings.outputFileConfig.Append = false
-	Settings.outputFileConfig.SizeLimit.Set("5mb")
-	Settings.outputFileConfig.QueueLimit = 0
-	//Settings.outputFileConfig.Append = true
-	Settings.outputFileConfig.FlushInterval = 5 * time.Second
-	Settings.outputFile.Set("/Users/liusu/Documents/request.json")
-	Settings.outputResponseFile.Set("/Users/liusu/Documents/response.json")
-	Settings.bizProtocol = []string{"http"}
-	if err != nil {
-		return
-	}
+	//err := Settings.inputHttp.Set(":9527")
+	//Settings.outputFileConfig.Append = false;
+	//Settings.outputFileConfig.SizeLimit.Set("5mb")
+	//Settings.outputFileConfig.QueueLimit = 0
+	////Settings.outputFileConfig.Append = true
+	//Settings.outputFileConfig.FlushInterval = 5 * time.Second
+	//Settings.outputFile.Set("/Users/liusu/Documents/request.json")
+	//Settings.outputResponseFile.Set("/Users/liusu/Documents/response.json")
+	//Settings.bizProtocol = [] string {"http"}
+	//if err != nil {
+	//	return
+	//}
 	//Settings.outputStdout = true;
 	//Settings.trackResponse = true;
 	//Settings.modifierConfig.URLRegexp.Set("/api/*")
